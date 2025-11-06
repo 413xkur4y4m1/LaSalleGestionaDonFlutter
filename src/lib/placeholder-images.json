@@ -1,3 +1,64 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "logo-salle",
+      "description": "La Salle University Logo",
+      "imageUrl": "/svgs/LogoSalle.svg",
+      "imageHint": "university logo"
+    },
+    {
+      "id": "logo-don-flutter",
+      "description": "Don Flutter Team Logo",
+      "imageUrl": "/svgs/LogoDonFlutter.svg",
+      "imageHint": "team logo"
+    },
+    {
+      "id": "cocina1",
+      "description": "Gastronomy lab kitchen view",
+      "imageUrl": "https://images.unsplash.com/photo-1640583341059-12deab9bf751?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxnYXN0cm9ub215JTIwa2l0Y2hlbnxlbnwwfHx8fDE3NjI0MDI0MDl8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "gastronomy kitchen"
+    },
+    {
+      "id": "cocina2",
+      "description": "Gastronomy lab kitchen close-up",
+      "imageUrl": "https://images.unsplash.com/photo-1632123679833-90985f2a24ce?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHxraXRjaGVuJTIwZXF1aXBtZW50fGVufDB8fHx8MTc2MjM3NzMzMnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "kitchen equipment"
+    },
+    {
+      "id": "cocina3",
+      "description": "Students cooking in the lab",
+      "imageUrl": "https://images.unsplash.com/photo-1578366941741-9e517759c620?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxzdHVkZW50cyUyMGNvb2tpbmd8ZW58MHx8fHwxNzYyNDY0MzY4fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "students cooking"
+    },
+    {
+      "id": "cocina4",
+      "description": "Prepared dishes from the lab",
+      "imageUrl": "https://images.unsplash.com/photo-1675670579446-8692392f91dc?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxnb3VybWV0JTIwZm9vZHxlbnwwfHx8fDE3NjIzNzIwMDZ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "gourmet food"
+    },
+    {
+      "id": "cocina5",
+      "description": "Another view of the gastronomy lab",
+      "imageUrl": "https://images.unsplash.com/photo-1610177534644-34d881503b83?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxtb2Rlcm4lMjBraXRjaGVufGVufDB8fHx8MTc2MjQzNzE1Mnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "modern kitchen"
+    },
+    {
+      "id": "salleM2",
+      "description": "La Salle campus building",
+      "imageUrl": "https://images.unsplash.com/photo-1619512673224-91cfb2688284?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHx1bml2ZXJzaXR5JTIwY2FtcHVzfGVufDB8fHx8MTc2MjM4Mzc0NXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "university campus"
+    },
+    {
+      "id": "salleM3",
+      "description": "La Salle campus gardens",
+      "imageUrl": "https://images.unsplash.com/photo-1563265500-fa2ff1f4fc9d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw5fHx1bml2ZXJzaXR5JTIwZ2FyZGVufGVufDB8fHx8MTc2MjQ2NDM2OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "university garden"
+    },
+    {
+      "id": "salleM4",
+      "description": "La Salle campus entrance",
+      "imageUrl": "https://images.unsplash.com/photo-1761318044223-a2dc78a104a0?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxjYW1wdXMlMjBlbnRyYW5jZXxlbnwwfHx8fDE3NjI0NjQzNjh8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "campus entrance"
+    }
+  ]
 }
