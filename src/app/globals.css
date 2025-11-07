@@ -86,3 +86,17 @@ body {
     @apply bg-background text-foreground;
   }
 }
+@keyframes rotar360 {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rotar360 {
+  animation: rotar360 5s linear infinite;
+  transform-origin: center; /* Muy importante para rotar desde el centro */
+  display: block; /* Evita problemas de inline SVGs */
+}
