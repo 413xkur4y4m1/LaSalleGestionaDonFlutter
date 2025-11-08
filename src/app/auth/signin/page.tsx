@@ -14,7 +14,7 @@ const SignInPage = () => {
   // Redirigir si ya está autenticado y cumple la condición del email
   useEffect(() => {
     if (status === 'authenticated') {
-      if (session?.user?.email?.endsWith('@lasalle.mx')) {
+      if (session?.user?.email?.endsWith('@ulsaneza.edu.mx')) {
         // Redirigir a /estudiante si es un usuario válido
         router.push('/estudiante');
       } else {
