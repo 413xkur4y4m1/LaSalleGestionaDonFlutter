@@ -1,7 +1,9 @@
+"use client";
+
 import React, { useState } from 'react';
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 
 interface GrupoModalProps {
   isOpen: boolean;
@@ -15,7 +17,6 @@ const GrupoModal: React.FC<GrupoModalProps> = ({ isOpen, onSubmit }) => {
   const isValidGrupo = /^[0-9]{2,3}[A-Z]$/.test(grupo);
 
   const handleSubmit = async () => {
-    if (!isValidGrupo) return;
     setIsSubmitting(true);
     try {
       await onSubmit(grupo);
@@ -24,17 +25,10 @@ const GrupoModal: React.FC<GrupoModalProps> = ({ isOpen, onSubmit }) => {
     }
   };
 
-  // Evita cerrar el modal sin enviar
-  const handleOpenChange = (open: boolean) => {
-    if (!open && !isSubmitting) {
-      // No permite cerrar manualmente
-      return;
-    }
-  };
-
   return (
-    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={isOpen} onOpenChange={() => {}}>
+      {/* Se eliminó closeable={false} */}
+      <DialogContent className="sm:max-w-md"> 
         <div className="space-y-6 text-center">
           <div>
             <h2 className="text-2xl font-bold text-[#0a1c65] mb-2">

@@ -1,3 +1,5 @@
+"use client";
+
 // Main layout wrapper
 // Props: children: ReactNode
 //
