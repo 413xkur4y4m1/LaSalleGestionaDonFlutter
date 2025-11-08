@@ -5,10 +5,11 @@ import IconoIA from '@/components/atoms/IconoIA';
 import IconoPrestamo from '@/components/atoms/IconoPrestamo';
 import IconoAdeudo from '@/components/atoms/IconoAdeudo';
 import IconoCompletado from '@/components/atoms/IconoCompletado';
-import { Button } from "@/components/ui/button"
-import getStudentData from '@/lib/firestore-operations'; // Importa la función que creaste
-// import GrupoModal from '@/components/organisms/GrupoModal'; // Importa tu modal de grupo (debes crearlo)
-// import { useChatbot } from '@/components/organisms/Chatbot'; // Importa el hook del chatbot si lo necesitas aquí
+import { Button } from "@/components/ui/button";
+import { getStudentData } from '@/lib/firestore-operations'; // ✅ Import corregido
+
+// import GrupoModal from '@/components/organisms/GrupoModal';
+// import { useChatbot } from '@/components/organisms/Chatbot';
 
 const EstudiantePage = () => {
   const { data: session, status } = useSession();
@@ -16,21 +17,13 @@ const EstudiantePage = () => {
   const [showGrupoModal, setShowGrupoModal] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(true);
   
-  // const { setIsOpen: setIsChatbotOpen } = useChatbot(); // Para controlar el chatbot desde aquí
-
-  // 1. Manejo de autenticación (useSession status === 'loading' lo maneja implícitamente)
-  // NextAuth maneja la redirección si no estás autenticado si configuras el middleware.
-
-  // 2. Fetch student data
   useEffect(() => {
     const fetchData = async () => {
       if (status === 'authenticated' && session?.user?.id) {
         try {
-          // Asumiendo que session.user.id existe y se usa como userId
           const data = await getStudentData(session.user.id as string);
           if (data) {
             setStudentGrupo(data.grupo || null);
-            // 3. Mostrar modal si el grupo está vacío
             if (!data.grupo) {
               setShowGrupoModal(true);
             }
@@ -42,7 +35,7 @@ const EstudiantePage = () => {
         }
       }
       if (status === 'unauthenticated') {
-          setIsLoadingData(false);
+        setIsLoadingData(false);
       }
     };
 
@@ -53,18 +46,8 @@ const EstudiantePage = () => {
     return <div className="flex items-center justify-center min-h-screen">Cargando dashboard...</div>;
   }
 
-  // if (showGrupoModal) {
-  //   // Retorna el modal si es necesario, o usa un portal para renderizarlo
-  //   return <GrupoModal onClose={() => setShowGrupoModal(false)} />;
-  // }
-  
-  // const handleOpenChatbot = () => {
-  //   setIsChatbotOpen(true);
-  // };
-
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      {/* Welcome card */}
       <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
         <h1 className="text-3xl font-bold text-[#0a1c65] mb-4">
           ¡Bienvenido, {session?.user?.name}!
@@ -73,7 +56,7 @@ const EstudiantePage = () => {
           Usa el asistente IA para solicitar préstamos de material de cocina
         </p>
         <Button
-          onClick={() => { /* handleOpenChatbot() */ }}
+          onClick={() => { /* abrir chatbot más adelante */ }}
           className="bg-gradient-to-r from-[#e10022] to-[#0a1c65]"
         >
           <IconoIA />
@@ -81,9 +64,8 @@ const EstudiantePage = () => {
         </Button>
       </div>
 
-      {/* Stats cards (placeholder) */}
+      {/* Tarjetas de estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* ... (Las tarjetas de estadísticas siguen igual) ... */}
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-yellow-100 rounded-lg">
@@ -99,7 +81,7 @@ const EstudiantePage = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-red-100 rounded-lg">
-              <IconoAdeudo  />
+              <IconoAdeudo />
             </div>
             <div>
               <p className="text-sm text-gray-500">Adeudos pendientes</p>

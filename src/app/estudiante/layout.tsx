@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import DashboardTemplate from '@/components/templates/DashboardTemplate';
 import GrupoModal from '@/components/organisms/GrupoModal';
-import getStudentData from '@/lib/firestore-operations';
+import * as firestoreOperations from '@/lib/firestore-operations';
 
 // Extiende los tipos de sesión para incluir `id` en user
 declare module 'next-auth' {
@@ -30,7 +30,7 @@ export default async function EstudianteLayout({ children }: EstudianteLayoutPro
   }
 
   // Obtiene datos del estudiante
-  const studentData = await getStudentData(session.user.id);
+  const studentData = await firestoreOperations.getStudentData(session.user.id);
   const needsGrupo = !studentData?.grupo;
 
   return (
@@ -39,8 +39,7 @@ export default async function EstudianteLayout({ children }: EstudianteLayoutPro
         <GrupoModal
           isOpen={needsGrupo}
           onSubmit={async (grupo) => {
-            // Aquí podrías actualizar el grupo en Firestore
-            // await updateStudentGrupo(session.user.id, grupo);
+            await firestoreOperations.updateStudentGrupo(session.user.id, grupo);
             redirect('/estudiante');
           }}
         />

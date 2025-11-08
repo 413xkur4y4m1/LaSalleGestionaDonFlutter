@@ -9,7 +9,7 @@ interface StudentData {
 }
 
 // Obtiene los datos de un estudiante por su userId
-export default async function getStudentData(userId: string): Promise<StudentData | null> {
+export async function getStudentData(userId: string): Promise<StudentData | null> {
   const docRef = doc(db, 'students', userId);
   const docSnap = await getDoc(docRef);
   if (docSnap.exists()) {
@@ -18,8 +18,8 @@ export default async function getStudentData(userId: string): Promise<StudentDat
   return null;
 }
 
-// Actualiza el grupo de un estudiante
 export async function updateStudentGrupo(userId: string, grupo: string): Promise<void> {
   const docRef = doc(db, 'students', userId);
   await updateDoc(docRef, { grupo });
 }
+
