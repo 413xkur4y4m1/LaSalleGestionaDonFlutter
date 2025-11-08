@@ -1,6 +1,5 @@
-import NextAuth from "next-auth";
-import AzureADProvider from "next-auth/providers/azure-ad";
 import { AuthOptions } from "next-auth";
+import AzureADProvider from "next-auth/providers/azure-ad";
 
 export const authOptions: AuthOptions = {
   providers: [
@@ -17,13 +16,8 @@ export const authOptions: AuthOptions = {
   ],
   secret: process.env.NEXTAUTH_SECRET,
   callbacks: {
-    async redirect({
-      url,
-      baseUrl,
-    }: { url: string; baseUrl: string }): Promise<string> {
-      // Allows relative callback URLs
+    async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;
-      // Allows callback URLs on the same domain
       else if (new URL(url).origin === baseUrl) return url;
       return baseUrl;
     },
@@ -32,6 +26,3 @@ export const authOptions: AuthOptions = {
     strategy: "jwt",
   },
 };
-
-const handler = NextAuth(authOptions);
-export { handler as GET, handler as POST };
