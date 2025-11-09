@@ -2,21 +2,22 @@
 
 import React from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { GrupoModal } from '@/components/organisms/GrupoModal';
-
+import DashboardTemplate from '@/components/templates/DashboardTemplate';
 
 const EstudiantePage = () => {
   const { user } = useAuth();
 
-  if (!user) {
-    return <p>Cargando...</p>;
-  }
-
   return (
-    <div>
-      <h1>Bienvenido, {user.displayName}</h1>
-      <p>Esta es la página del estudiante.</p>
-    </div>
+    <DashboardTemplate>
+      {user ? (
+        <div>
+          <h1>Bienvenido, {user.displayName}</h1>
+          <p>Esta es la página del estudiante.</p>
+        </div>
+      ) : (
+        <p>Cargando...</p>
+      )}
+    </DashboardTemplate>
   );
 };
 

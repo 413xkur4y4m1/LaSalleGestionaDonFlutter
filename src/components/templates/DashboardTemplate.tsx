@@ -16,29 +16,28 @@ interface DashboardTemplateProps {
 const DashboardTemplate: React.FC<DashboardTemplateProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [needsGrupo, setNeedsGrupo] = useState(false);
-  const {user} = useAuth()
+  const { user } = useAuth()
 
   useEffect(() => {
     async function fetchStudentData() {
-        try {
-            const auth = getAuth();
+      try {
+        const auth = getAuth();
 
-          const studentData = await firestoreOperations.getStudentData(auth.currentUser?.uid!!);
-            if(studentData?.grupo){
-            setNeedsGrupo(studentData.grupo==='' || studentData.grupo == null);
-          } else {
-            setNeedsGrupo(true)
+       if (auth.currentUser) {
+          const studentData = await firestoreOperations.getStudentData(auth.currentUser.uid);
+           if (studentData) {
+            setNeedsGrupo(studentData.grupo === '');
+              console.log(studentData.grupo)
           }
 
-        } catch (error) {
-          console.error("Error fetching student data:", error);
+          console.log("There is no StudenDAta")
         }
+      } catch (error) {
+        console.error("Error fetching student data:", error);
+      }
     }
-    const auth = getAuth()
-    if(auth.currentUser){
-      fetchStudentData()
-        }
 
+    fetchStudentData();
   }, [user]);
 
 

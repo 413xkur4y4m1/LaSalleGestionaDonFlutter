@@ -1,8 +1,7 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { AuthProvider } from '@/hooks/useAuth';
-
+import NextAuthProvider from '@/components/providers/NextAuthProvider';
 
 export const metadata: Metadata = {
   title: 'LaSalle Gestiona Portal',
@@ -14,8 +13,6 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-
   return (
     <html lang="en">
       <head>
@@ -24,10 +21,10 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body antialiased">
-      <AuthProvider>
+      <NextAuthProvider>
           {children}
           <Toaster />
-          </AuthProvider>
+          </NextAuthProvider>
       </body>
     </html>
   );

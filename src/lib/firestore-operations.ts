@@ -14,7 +14,7 @@ export interface StudentData {
   nombre: string;
   correo: string;
   rol: string;
-  grupo: string;
+  grupo: string | null | undefined;
   carrera: string;
   fotoPerfil: string;
   createdAt: any;
