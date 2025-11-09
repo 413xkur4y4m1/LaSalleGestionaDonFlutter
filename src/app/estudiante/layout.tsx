@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/authOptions';
+import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import DashboardTemplate from '@/components/templates/DashboardTemplate';
 import GrupoModal from '@/components/organisms/GrupoModal';
 import * as firestoreOperations from '@/lib/firestore-operations';
@@ -29,38 +29,8 @@ export default async function EstudianteLayout({ children }: EstudianteLayoutPro
     redirect('/api/auth/signin');
   }
 
-  // Obtiene datos del estudiante
-  let studentData = null;
-  try {
-    studentData = await firestoreOperations.getStudentData(session.user.id);
-  } catch (error) {
-    console.error("Error fetching student data:", error);
-    // Handle the error appropriately, maybe redirect to an error page
-    return <div>Error: Failed to load student data</div>;
-  }
-
-  const needsGrupo = !studentData?.grupo;
-
-  if (needsGrupo) {
-    return (
-      <GrupoModal
-        isOpen={needsGrupo}
-        onSubmit={async (grupo) => {
-          try {
-            await firestoreOperations.updateStudentGrupo(session.user.id, grupo);
-            // After successful update, force a re-fetch of data or reload the page
-            window.location.reload(); // Simple solution to refresh and re-evaluate
-          } catch (updateError) {
-            console.error("Error updating student group:", updateError);
-            // Handle the error appropriately, maybe show a toast
-          }
-        }}
-      />
-    );
-  }
-
   return (
-    <DashboardTemplate>
+    <DashboardTemplate session={session}>
       {children}
     </DashboardTemplate>
   );
