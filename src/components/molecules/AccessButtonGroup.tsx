@@ -3,17 +3,19 @@
 import ButtonGradient from "@/components/atoms/ButtonGradient";
 import ButtonOutline from "@/components/atoms/ButtonOutline";
 import { GraduationCap, Settings } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { signIn } from 'next-auth/react';
 
 const AccessButtonGroup = () => {
-  const router = useRouter();
+  const handleStudentLogin = async () => {
+    signIn('azure-ad', { callbackUrl: '/estudiante' });
+  };
 
   return (
     <div className="flex flex-col gap-4 items-center md:flex-row md:justify-center md:gap-6 xl:gap-8">
       <ButtonGradient
         icon={<GraduationCap className="h-5 w-5" />}
         className="w-full max-w-sm md:w-auto justify-center"
-        onClick={() => router.push("/auth/signin")}
+        onClick={handleStudentLogin}
       >
         Entrar como Estudiante
       </ButtonGradient>
@@ -21,7 +23,7 @@ const AccessButtonGroup = () => {
       <ButtonOutline
         icon={<Settings className="h-5 w-5" />}
         className="w-full max-w-sm md:w-auto justify-center"
-        onClick={() => router.push("/admin/signin")}
+        //onClick={() => router.push("/admin/signin")}
       >
         Entrar como Administrador
       </ButtonOutline>
