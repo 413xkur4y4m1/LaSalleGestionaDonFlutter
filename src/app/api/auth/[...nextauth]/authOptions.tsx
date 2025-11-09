@@ -16,9 +16,20 @@ export const authOptions: AuthOptions = {
   ],
   secret: process.env.NEXTAUTH_SECRET,
   pages: {
-    signIn: '/auth/signin', // 👈 usa tu página personalizada
+    signIn: '/auth/signin', // tu página personalizada
   },
   callbacks: {
+    // Aseguramos que la sesión contenga el email
+    async jwt({ token, user }) {
+      if (user) {
+        token.email = user.email; // ⚡ necesario para el middleware
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token?.email) session.user.email = token.email;
+      return session;
+    },
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;
       else if (new URL(url).origin === baseUrl) return url;
