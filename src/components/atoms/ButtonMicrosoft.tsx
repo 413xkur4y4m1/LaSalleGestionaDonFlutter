@@ -1,7 +1,7 @@
 import React from 'react';
+import { signIn } from 'next-auth/react';
 
 interface ButtonMicrosoftProps {
-  onClick: () => void;
   isLoading?: boolean;
   children?: React.ReactNode;
 }
@@ -22,10 +22,14 @@ const MicrosoftIcon = () => (
   </svg>
 );
 
-const ButtonMicrosoft: React.FC<ButtonMicrosoftProps> = ({ onClick, isLoading, children }) => {
+const ButtonMicrosoft: React.FC<ButtonMicrosoftProps> = ({ isLoading, children }) => {
+  const handleSignIn = () => {
+    signIn('azure-ad', { callbackUrl: '/estudiante' });
+  };
+
   return (
     <button
-      onClick={onClick}
+      onClick={handleSignIn}
       className={`bg-[#0a1c65] text-white font-semibold hover:bg-[#0a1c65]/90 hover:scale-105 hover:shadow-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 rounded-md
         py-3 px-6 text-sm md:py-4 md:px-10 md:text-base xl:py-5 xl:px-14 xl:text-lg`}
       disabled={isLoading}
