@@ -3,49 +3,61 @@
 import React, { useState, useEffect } from 'react';
 import TopNavbar from '../organisms/TopNavbar';
 import SidebarMenu from '../organisms/SidebarMenu';
-import Chatbot from '../organisms/Chatbot'; // Importación por defecto funcionando correctamente
+import Chatbot from '../organisms/Chatbot';
 import GrupoModal from '../organisms/GrupoModal';
 import * as firestoreOperations from '@/lib/firestore-operations';
-import { Session } from 'next-auth';
+import { getAuth} from "firebase/auth";
+import {useAuth} from '@/hooks/useAuth'
 
 interface DashboardTemplateProps {
   children: React.ReactNode;
-  session: Session
 }
 
-const DashboardTemplate: React.FC<DashboardTemplateProps> = ({ children, session }) => {
+const DashboardTemplate: React.FC<DashboardTemplateProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [needsGrupo, setNeedsGrupo] = useState(false)
+  const [needsGrupo, setNeedsGrupo] = useState(false);
+  const {user} = useAuth()
+
   useEffect(() => {
     async function fetchStudentData() {
-      if (session?.user?.id) {
         try {
-          const studentData = await firestoreOperations.getStudentData(session.user.id);
-          setNeedsGrupo(!studentData?.grupo);
+            const auth = getAuth();
+
+          const studentData = await firestoreOperations.getStudentData(auth.currentUser?.uid!!);
+            if(studentData?.grupo){
+            setNeedsGrupo(studentData.grupo==='' || studentData.grupo == null);
+          } else {
+            setNeedsGrupo(true)
+          }
+
         } catch (error) {
           console.error("Error fetching student data:", error);
         }
-      }
     }
+    const auth = getAuth()
+    if(auth.currentUser){
+      fetchStudentData()
+        }
 
-    fetchStudentData();
-  }, [session?.user?.id]);
-  
-  if (needsGrupo) return (<GrupoModal
+  }, [user]);
+
+
+  return needsGrupo ? (<GrupoModal
     isOpen={needsGrupo}
     onSubmit={async (grupo) => {
       try {
-        await firestoreOperations.updateStudentGrupo(session.user.id, grupo);
+        const auth = getAuth()
+        if(auth.currentUser){
+        await firestoreOperations.updateStudentGrupo(auth.currentUser.uid, grupo);
         // After successful update, force a re-fetch of data or reload the page
         window.location.reload(); // Simple solution to refresh and re-evaluate
-      } catch (updateError) {
+      }}
+       catch (updateError) {
         console.error("Error updating student group:", updateError);
         // Handle the error appropriately, maybe show a toast
       }
     }}
-  />)
-
-  return (
+  />) : (
     <div className="min-h-screen bg-gray-50">
       <TopNavbar onMenuToggle={() => setIsSidebarOpen(!isSidebarOpen)} />
 

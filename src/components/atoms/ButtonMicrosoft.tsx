@@ -1,5 +1,5 @@
 import React from 'react';
-import { signIn } from 'next-auth/react';
+import { getAuth, signInWithRedirect, OAuthProvider } from "firebase/auth";
 
 interface ButtonMicrosoftProps {
   isLoading?: boolean;
@@ -24,7 +24,9 @@ const MicrosoftIcon = () => (
 
 const ButtonMicrosoft: React.FC<ButtonMicrosoftProps> = ({ isLoading, children }) => {
   const handleSignIn = () => {
-    signIn('azure-ad', { callbackUrl: '/estudiante' });
+    const auth = getAuth();
+    const provider = new OAuthProvider('microsoft.com');
+    signInWithRedirect(auth, provider)
   };
 
   return (

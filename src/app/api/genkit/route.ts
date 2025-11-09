@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from "../auth/[...nextauth]/authOptions";
 import { db } from '@/lib/firebase';
 import { collection, getDocs } from 'firebase/firestore';
 
@@ -9,24 +7,19 @@ import { collection, getDocs } from 'firebase/firestore';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    
     const { message, action } = await req.json();
 
     // Route based on action
     switch (action) {
       case 'send_message':
-        return await handleMessage(message, session.user.id);
+        return await handleMessage(message, '');
 
       case 'request_catalog':
         return await fetchMaterialCatalog();
 
       case 'create_loan':
-        return await createLoanRequest(req.body, session.user.id);
+        return await createLoanRequest(req.body, '');
 
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
