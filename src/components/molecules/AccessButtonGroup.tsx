@@ -1,16 +1,15 @@
 "use client";
 
-import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import ButtonGradient from "@/components/atoms/ButtonGradient";
 import ButtonOutline from "@/components/atoms/ButtonOutline";
 import { GraduationCap, Settings } from "lucide-react";
 
 const AccessButtonGroup = () => {
-  const handleStudentLogin = async () => {
-    await signIn("azure-ad", {
-      callbackUrl: "/estudiante",
-      redirect: true,
-    });
+  const router = useRouter();
+
+  const handleStudentLogin = () => {
+    router.push("/login");
   };
 
   return (
