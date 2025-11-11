@@ -1,23 +1,7 @@
-// Combines: Icon + Text (conditional)
-// Props:
-//   - icon: ReactNode
-//   - label: string
-//   - active: boolean
-//   - href: string
-//   - onClick?: function (para placeholder sin navegación)
-//
-// Styles:
-//   - Active: bg-[#e10022]/10 border-l-4 border-[#e10022]
-//   - Hover: bg-gray-100/10
-//   - xs/sm: Icon only, centered, no text
-//   - md+: Icon + text horizontal
-//
-// NOTE: Para secciones sin funcionalidad, onClick muestra toast
-//       "Esta sección estará disponible próximamente"
+'use client';
 
 import React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 interface MenuItemProps {
@@ -29,20 +13,9 @@ interface MenuItemProps {
 }
 
 const MenuItem: React.FC<MenuItemProps> = ({ icon, label, active, href, onClick }) => {
-    const router = useRouter()
 
-  const handleClick = () => {
-    if (onClick) {
-      onClick();
-    } else if (href) {
-      router.push(href)
-    } else {
-      toast.info('Esta sección estará disponible próximamente');
-    }
-  };
-
-  return (
-    <li
+  const content = (
+    <div
       className={`
         flex items-center
         md:flex-row md:justify-start
@@ -51,10 +24,27 @@ const MenuItem: React.FC<MenuItemProps> = ({ icon, label, active, href, onClick 
         ${active ? 'bg-[#e10022]/10 border-l-4 border-[#e10022]' : ''}
         cursor-pointer
       `}
-      onClick={handleClick}
     >
       {icon}
       <span className="hidden md:block">{label}</span>
+    </div>
+  );
+
+  const effectiveOnClick = onClick ? onClick : () => toast.info('Esta sección estará disponible próximamente');
+
+  if (href) {
+    return (
+      <li>
+        <Link href={href} passHref>
+          {content}
+        </Link>
+      </li>
+    );
+  }
+
+  return (
+    <li onClick={effectiveOnClick}>
+      {content}
     </li>
   );
 };

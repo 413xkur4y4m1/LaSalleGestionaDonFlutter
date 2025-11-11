@@ -1,4 +1,6 @@
- import React from 'react';
+'use client';
+
+import React from 'react';
 import LoginCard from '@/components/organisms/LoginCard';
 
 const LoginPage = () => {

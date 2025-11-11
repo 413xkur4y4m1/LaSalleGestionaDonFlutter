@@ -1,42 +1,4 @@
-// Combines: Multiple MenuItem components
-//
-// Menu items:
-//   1. Préstamos (IconoPrestamo) - onClick placeholder toast
-//   2. Adeudos (IconoAdeudo) - onClick placeholder toast
-//   3. Pagados (IconoPagados) - onClick placeholder toast
-//   4. Completados (IconoCompletado) - onClick placeholder toast
-//   5. Mi perfil (User icon) - onClick placeholder toast
-//
-// Structure:
-// <aside className={`
-//   fixed md:sticky top-0 left-0 h-screen
-//   bg-[#0a1c65] text-white
-//   transition-transform duration-300 ease-in-out
-//   z-50 md:z-30
-//   ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-//   w-[60px] sm:w-[80px] md:w-[200px] lg:w-[220px] xl:w-[240px]
-// `}>
-//
-//   {/* Close button (mobile only) */}
-//   <div className="md:hidden p-4 flex justify-end">
-//     <button onClick={onClose}>✕</button>
-//   </div>
-//
-//   <div className="flex flex-col py-4 space-y-2">
-//     {menuItems.map(item => (
-//       <MenuItem
-//         key={item.label}
-//         {...item}
-//         onClick={() => {
-//           toast.info('Esta sección estará disponible próximamente');
-//           if (window.innerWidth < 768) onClose();
-//         }}
-//       />
-//     ))}
-//   </div>
-// </aside>
-//
-// Props: isOpen: boolean, onClose: () => void
+'use client';
 
 import React from 'react';
 import MenuItem from '../molecules/MenuItem';
