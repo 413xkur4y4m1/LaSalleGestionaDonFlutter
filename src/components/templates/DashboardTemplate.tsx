@@ -7,7 +7,7 @@ import Chatbot from '../organisms/Chatbot';
 import GrupoModal from '../organisms/GrupoModal';
 import * as firestoreOperations from '@/lib/firestore-operations';
 import { getAuth} from "firebase/auth";
-import {useAuth} from '@/hooks/useAuth'
+import { useAuth } from '@/components/providers/NextAuthProvider';
 
 interface DashboardTemplateProps {
   children: React.ReactNode;

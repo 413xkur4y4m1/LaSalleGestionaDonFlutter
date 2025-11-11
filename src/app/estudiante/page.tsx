@@ -1,7 +1,7 @@
  "use client";
 
 import React from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/components/providers/NextAuthProvider';
 import DashboardTemplate from '@/components/templates/DashboardTemplate';
 
 const EstudiantePage = () => {
@@ -11,7 +11,7 @@ const EstudiantePage = () => {
     <DashboardTemplate>
       {user ? (
         <div>
-          <h1>Bienvenido, {user.displayName}</h1>
+          <h1>Bienvenido, {user.name}</h1>
           <p>Esta es la página del estudiante.</p>
         </div>
       ) : (

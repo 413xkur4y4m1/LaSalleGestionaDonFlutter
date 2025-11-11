@@ -1,90 +1,87 @@
-import { db } from './firebase';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  collection,
-  serverTimestamp,
-  updateDoc
-} from 'firebase/firestore';
+import { db } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
 
-
-export interface StudentData {
+interface StudentData {
   uid: string;
   nombre: string;
   correo: string;
   rol: string;
-  grupo: string | null | undefined;
+  grupo: string;
   carrera: string;
   fotoPerfil: string;
-  createdAt: any;
-  lastLogin: any;
+  createdAt: any; // Use any for Timestamp or Date
+  lastLogin: any; // Use any for Timestamp or Date
 }
-// Check if student document exists and has grupo
-export async function getStudentData(uid: string): Promise<StudentData | null> {
-  const studentRef = doc(db, 'Estudiantes', uid);
-  const studentSnap = await getDoc(studentRef);
 
-  if (!studentSnap.exists()) {
+interface LoanData {
+  codigo: string;
+  nombreMaterial: string;
+  cantidad: number;
+  precio_unitario: number;
+  precio_total: number;
+  fechaInicio: any;
+  fechaDevolucion: any;
+  estado: string;
+  grupo: string;
+  createdAt: any;
+}
+
+export const getStudentData = async (uid: string): Promise<StudentData | null> => {
+  const docRef = doc(db, "Estudiantes", uid);
+  const docSnap = await getDoc(docRef);
+
+  if (docSnap.exists()) {
+    return docSnap.data() as StudentData;
+  } else {
     return null;
   }
+};
 
-  return studentSnap.data() as StudentData;
-}
-
-// Create or update student document
-export async function createOrUpdateStudent(user: any) {
-  const studentRef = doc(db, 'Estudiantes', user.uid);
+export const createOrUpdateStudent = async (user: any) => {
+  const studentRef = doc(db, "Estudiantes", user.id);
   const studentSnap = await getDoc(studentRef);
 
-  if (!studentSnap.exists()) {
-    // Create new student
+  const isNewUser = !studentSnap.exists();
+  let needsGrupo = false;
+
+  if (isNewUser) {
     await setDoc(studentRef, {
-      uid: user.uid,
-      nombre: user.displayName || '' , // Access displayName property
-      correo: user.email || '',
-      rol: 'estudiante',
-      grupo: '', // Empty initially
-      carrera: 'turismo',
-      fotoPerfil: user.photoURL || '',
+      uid: user.id,
+      nombre: user.name || "",
+      correo: user.email || "",
+      rol: "estudiante",
+      grupo: "", // Empty on creation, to be filled by modal
+      carrera: "turismo", // Default value as per spec
+      fotoPerfil: user.image || "",
       createdAt: serverTimestamp(),
-      lastLogin: serverTimestamp()
+      lastLogin: serverTimestamp(),
     });
-
-    return { isNew: true, needsGrupo: true };
+    needsGrupo = true;
   } else {
-    // Update last login
     await updateDoc(studentRef, {
-      lastLogin: serverTimestamp()
+      lastLogin: serverTimestamp(),
     });
-
     const data = studentSnap.data();
-    return {
-      isNew: false,
-      needsGrupo: !data.grupo || data.grupo === ''
-    };
+    if (!data?.grupo) {
+      needsGrupo = true;
+    }
   }
-}
 
+  return { isNewUser, needsGrupo };
+};
 
-// Update student grupo
-export async function updateStudentGrupo(uid: string, grupo: string) {
-  const studentRef = doc(db, 'Estudiantes', uid);
-
+export const updateStudentGrupo = async (uid: string, grupo: string) => {
+  const studentRef = doc(db, "Estudiantes", uid);
   await updateDoc(studentRef, {
-    grupo: grupo.toUpperCase()
+    grupo: grupo.toUpperCase(),
   });
-}
+};
 
-// Create loan in Firestore
-export async function createLoan(uid: string, loanData: any) {
-  const loansRef = collection(db, 'Estudiantes', uid, 'Prestamos');
-  const newLoanRef = doc(loansRef);
-
-  await setDoc(newLoanRef, {
+export const createLoan = async (uid: string, loanData: any) => {
+  const loansCollectionRef = collection(db, "Estudiantes", uid, "Prestamos");
+  const docRef = await addDoc(loansCollectionRef, {
     ...loanData,
-    createdAt: serverTimestamp()
+    createdAt: serverTimestamp(),
   });
-
-  return newLoanRef.id;
-}
+  return docRef.id;
+};

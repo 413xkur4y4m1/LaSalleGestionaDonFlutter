@@ -1,14 +1,16 @@
-"use client"
-import { getAuth, signInWithRedirect, OAuthProvider } from "firebase/auth";
+"use client";
+
+import { signIn } from "next-auth/react";
 import ButtonGradient from "@/components/atoms/ButtonGradient";
 import ButtonOutline from "@/components/atoms/ButtonOutline";
 import { GraduationCap, Settings } from "lucide-react";
 
 const AccessButtonGroup = () => {
-  const handleSignIn = async () => {
-    const auth = getAuth();
-    const provider = new OAuthProvider('microsoft.com');
-    await signInWithRedirect(auth, provider);
+  const handleStudentLogin = async () => {
+    await signIn("azure-ad", {
+      callbackUrl: "/estudiante",
+      redirect: true,
+    });
   };
 
   return (
@@ -16,7 +18,7 @@ const AccessButtonGroup = () => {
       <ButtonGradient
         icon={<GraduationCap className="h-5 w-5" />}
         className="w-full max-w-sm md:w-auto justify-center"
-        onClick={handleSignIn}
+        onClick={handleStudentLogin}
       >
         Entrar como Estudiante
       </ButtonGradient>
