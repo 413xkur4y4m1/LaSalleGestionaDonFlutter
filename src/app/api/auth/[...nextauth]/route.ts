@@ -11,46 +11,57 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
-      // Validate email ends with @lasalle.mx
-      if (user.email && user.email.endsWith("@lasalle.mx")) {
-        // Call createOrUpdateStudent to handle Firestore operations
-        if (user.id) {
-          await createOrUpdateStudent(user);
-        }
-        return true;
+    // 1. signIn Callback: Controls if a user is allowed to sign in.
+    // This is the primary security check.
+    async signIn({ user }) {
+      // It allows sign-in only if the email belongs to the correct domain.
+      if (user.email && user.email.endsWith("@ulsaneza.edu.mx")) {
+        return true; // The user is allowed to proceed.
       }
-      return false;
+      // If the email does not match, it denies access and the process stops here.
+      console.log(`Sign-in denied for email: ${user.email}`);
+      return false; 
     },
-    async session({ session, token }) {
-      // Add custom fields (id, rol) to session
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
+
+    // 2. JWT Callback: Populates the JWT token with custom data.
+    // This runs after signIn and before the session is created.
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        // Assigns a default role if not present.
+        token.rol = user.rol || "estudiante";
       }
-      if (session.user && token.rol) {
+      return token;
+    },
+    
+    // 3. Session Callback: Enriches the client-side session object.
+    // Makes the custom data from the token available to the client.
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
         session.user.rol = token.rol as string;
       }
       return session;
     },
-    async jwt({ token, user }) {
-      // Keep information in token
-      if (user) {
-        token.id = user.id;
-        token.rol = user.rol || "estudiante"; // Assign default role if not present
-      }
-      return token;
-    },
   },
   events: {
+    // 4. signIn Event: Runs AFTER a successful sign-in.
+    // This is the perfect place for side effects that should not block the login.
     async signIn(message) {
-      if (message.user.id) {
-        await createOrUpdateStudent(message.user);
+      if (message.user.id && message.user.email) {
+        try {
+          // Creates or updates the user in Firestore after they have successfully authenticated.
+          await createOrUpdateStudent(message.user);
+        } catch (error) {
+          console.error("Error in createOrUpdateStudent event:", error);
+        }
       }
     },
   },
   pages: {
-    signIn: "/", // Custom sign-in page handled by the landing page
-    error: "/",   // Custom error page handled by the landing page
+    // If sign-in is required or an error occurs, redirect to the homepage.
+    signIn: "/",
+    error: "/",
   },
   session: {
     strategy: "jwt",
