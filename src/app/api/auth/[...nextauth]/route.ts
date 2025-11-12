@@ -1,6 +1,7 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
-import { createOrUpdateStudent } from "@/lib/firestore-operations";
+import { createOrUpdateStudentServer } from "@/lib/firestore-operations-server";
+
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -44,7 +45,8 @@ export const authOptions: NextAuthOptions = {
     async signIn(message) {
       if (message.user.id && message.user.email) {
         try {
-          await createOrUpdateStudent(message.user);
+          await createOrUpdateStudentServer(message.user);
+
         } catch (error) {
           console.error("Error en createOrUpdateStudent:", error);
         }
