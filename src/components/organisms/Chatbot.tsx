@@ -4,11 +4,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Send, LoaderCircle } from 'lucide-react';
-import { QRCodeSVG } from "qrcode.react";
-// CORREGIDO: Importación nombrada
+import { QRCodeSVG } from 'qrcode.react';
 
 import IconoGastrobot from '../atoms/IconoGastrobot';
 import CatalogView from './CatalogView';
+import LoanListView from './LoanListView';
+import DebtListView from './DebtListView';
 import { Material } from '../molecules/MaterialCard';
 import QuantitySelector from '../molecules/QuantitySelector';
 import ReturnDatePicker from '../molecules/ReturnDatePicker';
@@ -62,32 +63,29 @@ const Gastrobot = () => {
     if (session?.user?.name && messages.length === 0) {
       addMessageToChat(`¡Hola ${session.user.name.split(' ')[0]}! 👋 Soy Gastrobot... ¿En qué te ayudo?`, 'model');
     }
-  }, [session]);
+  }, [session, messages.length]);
 
   const addMessageToChat = (text: string | null, role: 'user' | 'model', component: React.ReactNode | null = null) => {
-    setMessages(prev => [...prev, { id: Date.now(), role, text: text || undefined, component: component || undefined }]);
+    setMessages(prev => [...prev, { id: Date.now() + Math.random(), role, text: text || undefined, component: component || undefined }]);
   };
 
   const removeComponentFromChat = () => setMessages(prev => prev.filter(msg => !msg.component));
 
-  // --- MANEJADORES DEL FLUJO DE PRÉSTAMO ---
+  // --- MANEJADORES DE FLUJO ---
 
   const handleMaterialSelected = (material: Material) => {
     removeComponentFromChat();
-    setLoanState({ material });
+    setLoanState({ material }); 
     addMessageToChat(`He elegido: ${material.nombre}`, 'user');
-    addMessageToChat(null, 'model', <QuantitySelector material={material} onConfirm={handleQuantityConfirmed} onCancel={handleFlowCancelled} />);
+    addMessageToChat(null, 'model', <QuantitySelector material={material} onConfirm={(quantity) => handleQuantityConfirmed(quantity, material)} onCancel={handleFlowCancelled} />);
   };
 
-  const handleQuantityConfirmed = (quantity: number) => {
+  const handleQuantityConfirmed = (quantity: number, material: Material) => {
     removeComponentFromChat();
-    const updatedLoanState = { ...loanState, quantity };
+    const updatedLoanState = { material, quantity };
     setLoanState(updatedLoanState);
     addMessageToChat(`Necesito ${quantity} unidad(es).`, 'user');
-    addMessageToChat(`Seleccionado:
-• ${updatedLoanState.material?.nombre} x${quantity}
-
-¿Cuándo lo devolverás?`, 'model');
+    addMessageToChat(`Seleccionado:\n• ${updatedLoanState.material?.nombre} x${quantity}\n\n¿Cuándo lo devolverás?`, 'model');
     addMessageToChat(null, 'model', <ReturnDatePicker onConfirm={(date) => handleDateConfirmed(date, updatedLoanState)} onCancel={handleFlowCancelled} />);
   };
   
@@ -98,37 +96,21 @@ const Gastrobot = () => {
       addMessageToChat("¡Perfecto! Generando tu solicitud...", 'model');
       setIsLoading(true);
   
-      // --- LLAMADA AL BACKEND --- 
       try {
-          const response = await fetch('/api/prestamos', { // Nuevo endpoint para préstamos
+          const response = await fetch('/api/prestamos', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                  studentUid: session?.user.id,
-                  materialId: finalLoanState.material?.id,
-                  materialNombre: finalLoanState.material?.nombre,
-                  cantidad: finalLoanState.quantity,
-                  fechaDevolucion: date.toISOString(),
-                  grupo: session?.user.grupo, // Asumiendo que el grupo está en la sesión
-              }),
+              body: JSON.stringify({ studentUid: session?.user.id, ...finalLoanState, fechaDevolucion: date.toISOString(), grupo: session?.user.grupo }),
           });
-  
-          if (!response.ok) throw new Error(await response.text());
-  
-          const { loanCode } = await response.json(); // El backend nos devuelve el código del préstamo
-  
-          // Flujo final exitoso
+          if (!response.ok) throw new Error((await response.json()).message || 'Error en el servidor');
+          const { loanCode } = await response.json(); 
           addMessageToChat("¡Listo! Tu solicitud ha sido generada.", 'model');
           addMessageToChat(null, 'model', <QRCodeDisplay loanCode={loanCode} />);
           addMessageToChat("✅ También te envié este código a tu correo institucional.", 'model');
-          setLoanState({}); // Reseteamos para el próximo préstamo
-  
+          setLoanState({});
       } catch (error) {
-          console.error("Error al crear el préstamo:", error);
-          addMessageToChat(`Lo siento, hubo un error al procesar tu solicitud: ${(error as Error).message}`, 'model');
-      } finally {
-          setIsLoading(false);
-      }
+          addMessageToChat(`Lo siento, hubo un error: ${(error as Error).message}`, 'model');
+      } finally { setIsLoading(false); }
   };
 
   const handleFlowCancelled = () => {
@@ -137,7 +119,7 @@ const Gastrobot = () => {
     addMessageToChat("Solicitud cancelada.", 'user');
     addMessageToChat("De acuerdo, he cancelado la solicitud. ¿Hay algo más en lo que pueda ayudarte?", 'model');
     setShowSuggestions(true);
-  }
+  };
 
   // --- FUNCIÓN PRINCIPAL DE ENVÍO ---
   const handleSend = async (messageText?: string) => {
@@ -147,25 +129,49 @@ const Gastrobot = () => {
     addMessageToChat(textToSend, 'user');
     setInput('');
     setShowSuggestions(false);
-
-    if (loanState.material) return; // Si estamos en un flujo, no hacemos nada más
-
-    if (textToSend.toLowerCase().includes('solicitar un préstamo')) {
-      addMessageToChat("¡Perfecto! Aquí tienes nuestro catálogo.", 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
-      return;
-    }
-
-    // Para otros casos, llamamos a Genkit
     setIsLoading(true);
+
     try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: messages.map(m => ({ role: m.role, parts: [{ text: m.text || '' }] })), studentUid: session.user.id }),
-      });
-      if (!response.ok) throw new Error('Error de la IA.');
-      addMessageToChat(await response.text(), 'model');
-    } catch (error) { addMessageToChat('Lo siento, no puedo responder ahora.', 'model'); } finally { setIsLoading(false); }
+        // --- FLUJO: Solicitar Préstamo ---
+        if (textToSend.toLowerCase().includes('solicitar un préstamo')) {
+            addMessageToChat("¡Perfecto! Aquí tienes nuestro catálogo.", 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
+        // --- FLUJO: Ver Préstamos Activos ---
+        } else if (textToSend.toLowerCase().includes('ver mis préstamos activos')) {
+            addMessageToChat("Consultando tus préstamos...", 'model');
+            const res = await fetch(`/api/prestamos?studentUid=${session.user.id}`);
+            if (!res.ok) throw new Error('No pude consultar tus préstamos.');
+            const loans = await res.json();
+            removeComponentFromChat(); // Limpia mensajes de "cargando"
+            addMessageToChat(null, 'model', <LoanListView loans={loans} />);
+        // --- FLUJO: Consultar Adeudos ---
+        } else if (textToSend.toLowerCase().includes('consultar adeudos')) {
+            addMessageToChat("Buscando si tienes adeudos...", 'model');
+            const res = await fetch(`/api/adeudos?studentUid=${session.user.id}`);
+            if (!res.ok) throw new Error('No pude consultar tus adeudos.');
+            const debts = await res.json();
+            removeComponentFromChat(); // Limpia mensajes de "cargando"
+            addMessageToChat(null, 'model', <DebtListView debts={debts} />);
+        // --- FLUJO: Ayuda y fallback a Genkit ---
+        } else {
+            const response = await fetch('/api/genkit', { // CAMBIADO A /api/genkit
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ history: messages.map(m => ({ role: m.role, parts: [{ text: m.text || '' }] })), studentUid: session.user.id }),
+            });
+            if (!response.ok) throw new Error('La IA no está disponible ahora mismo.');
+            const genkitResponse = await response.json();
+            addMessageToChat(genkitResponse.response, 'model');
+        }
+    } catch (error) {
+        removeComponentFromChat();
+        addMessageToChat(`Uhm, algo salió mal: ${(error as Error).message}`, 'model');
+    } finally {
+        setIsLoading(false);
+        // Reactivar sugerencias si el flujo principal ha terminado
+        if (!loanState.material) {
+          setShowSuggestions(true);
+        }
+    }
   };
 
   return (
@@ -186,11 +192,13 @@ const Gastrobot = () => {
                     </div>
                 </div>
             ))}
-            {showSuggestions && messages.length > 0 && (
-                <div className="flex flex-wrap gap-2 justify-start mb-4 pl-10">
-                    <SuggestionButton text="Solicitar un préstamo" onClick={() => handleSend("Solicitar un préstamo")} />
-                    {/* Otros botones... */}
-                </div>
+            {showSuggestions && messages.length > 1 && !isLoading && (
+              <div className="flex flex-wrap gap-2 justify-start mb-4 pl-10">
+                  <SuggestionButton text="🛒 Solicitar un préstamo" onClick={handleSend} />
+                  <SuggestionButton text="📋 Ver mis préstamos activos" onClick={handleSend} />
+                  <SuggestionButton text="💰 Consultar adeudos" onClick={handleSend} />
+                  <SuggestionButton text="❓ Ayuda general" onClick={handleSend} />
+              </div>
             )}
             {isLoading && (
                 <div className="flex items-end gap-2 mb-4 justify-start">
@@ -203,12 +211,12 @@ const Gastrobot = () => {
         {/* Input */}
         <div className="p-3 border-t bg-white rounded-b-lg">
             <div className="flex items-center bg-gray-100 rounded-full">
-                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()} className="flex-1 bg-transparent p-3 rounded-full focus:outline-none text-sm" placeholder="Escribe un mensaje..." disabled={isLoading || !!loanState.material} />
-                <button onClick={() => handleSend()} disabled={isLoading || !input.trim() || !!loanState.material} className="p-3 text-red-500 hover:text-red-600 disabled:text-gray-400"><Send className="h-5 w-5" /></button>
+                <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSend()} className="flex-1 bg-transparent p-3 rounded-full focus:outline-none text-sm" placeholder="Escribe un mensaje..." disabled={isLoading || (!!loanState.material)} />
+                <button onClick={() => handleSend()} disabled={isLoading || !input.trim() || (!!loanState.material)} className="p-3 text-red-500 hover:text-red-600 disabled:text-gray-400"><Send className="h-5 w-5" /></button>
             </div>
         </div>
     </div>
   );
 };
 
-export default Gastrobot;
+export default Gastrobot;        

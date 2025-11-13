@@ -1,15 +1,13 @@
 
 import AIChatbot from '@/components/organisms/Chatbot';
-import DashboardTemplate from '@/components/templates/DashboardTemplate';
 
 const ChatbotPage = () => {
   return (
-    <DashboardTemplate>
-      {/* Aumentamos la altura para que el chatbot sea más grande */}
-      <div className="h-[calc(100vh-8rem)]">
+    <div className="w-full h-full max-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="w-full h-full max-w-4xl mx-auto">
         <AIChatbot />
       </div>
-    </DashboardTemplate>
+    </div>
   );
 };
 

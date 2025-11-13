@@ -1,13 +1,49 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db, rtdb } from '@/lib/firebase-config';
-import { doc, runTransaction, collection, serverTimestamp } from 'firebase/firestore';
-import { ref, get, update, child } from 'firebase/database';
+import { doc, runTransaction, collection, serverTimestamp, getDocs, query, where } from 'firebase/firestore';
+import { ref, get, update } from 'firebase/database';
 
-// Función para generar el código del préstamo
-// En una implementación real, este número debería venir de un contador en Firestore para evitar colisiones.
+// --- OBTENER PRÉSTAMOS ACTIVOS DE UN ESTUDIANTE ---
+export async function GET(req: NextRequest) {
+    try {
+        const { searchParams } = new URL(req.url);
+        const studentUid = searchParams.get('studentUid');
+
+        if (!studentUid) {
+            return NextResponse.json({ message: 'El ID del estudiante es requerido.' }, { status: 400 });
+        }
+
+        const loansCollectionRef = collection(db, `Estudiantes/${studentUid}/Prestamos`);
+        
+        // Creamos una consulta para filtrar solo los préstamos con estado "activo"
+        const q = query(loansCollectionRef, where('estado', '==', 'activo'));
+        
+        const querySnapshot = await getDocs(q);
+
+        const activeLoans = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            // Convertimos los Timestamps de Firestore a un formato estándar (ISO string) para que sean serializables en JSON
+            return {
+                id: doc.id,
+                ...data,
+                fechaInicio: data.fechaInicio?.toDate().toISOString(),
+                fechaDevolucion: data.fechaDevolucion?.toDate().toISOString(),
+            };
+        });
+
+        return NextResponse.json(activeLoans, { status: 200 });
+
+    } catch (error: any) {
+        console.error("Error al obtener los préstamos:", error);
+        return NextResponse.json({ message: 'Error interno del servidor al obtener préstamos.' }, { status: 500 });
+    }
+}
+
+
+// --- CREAR UN NUEVO PRÉSTAMO ---
 const generateLoanCode = (grupo: string) => {
-    const randomPart = Math.floor(10000 + Math.random() * 90000);
+    const randomPart = Math.floor(1000 + Math.random() * 9000); // 4 dígitos
     return `PRST-${grupo}-${randomPart}`;
 }
 
@@ -20,61 +56,49 @@ export async function POST(req: NextRequest) {
             materialNombre,
             cantidad,
             fechaDevolucion,
-            grupo = 'GPO' // Grupo por defecto si no viene
+            grupo = 'GPO'
         } = body;
 
-        // --- Validación de Entrada ---
         if (!studentUid || !materialId || !cantidad || !fechaDevolucion) {
             return NextResponse.json({ message: 'Faltan datos requeridos.' }, { status: 400 });
         }
 
         const loanCode = generateLoanCode(grupo);
-        const studentDocRef = doc(db, 'Estudiantes', studentUid);
-        const newLoanRef = doc(collection(studentDocRef, 'Prestamos')); // Genera un ID automático
+        const newLoanRef = doc(collection(db, `Estudiantes/${studentUid}/Prestamos`));
         const materialRtdbRef = ref(rtdb, `materiales/${materialId}`);
 
-        // --- Transacción Atómica --- 
-        // Esto asegura que o todo se completa, o nada cambia.
         await runTransaction(db, async (firestoreTransaction) => {
-            // 1. Leer el stock actual de Realtime Database
             const materialSnapshot = await get(materialRtdbRef);
             if (!materialSnapshot.exists()) {
-                throw new Error(`El material con ID ${materialId} no existe en Realtime DB.`);
+                throw new Error(`El material con ID ${materialId} no existe.`);
             }
 
             const currentStock = materialSnapshot.val().cantidad;
-
-            // 2. Validar si hay suficiente stock
             if (currentStock < cantidad) {
-                throw new Error(`Stock insuficiente para ${materialNombre}. Disponible: ${currentStock}, Solicitado: ${cantidad}`);
+                throw new Error(`Stock insuficiente para ${materialNombre}. Disponible: ${currentStock}`);
             }
 
             const newStock = currentStock - cantidad;
 
-            // 3. Preparar la escritura en Firestore
             firestoreTransaction.set(newLoanRef, {
                 codigo: loanCode,
                 nombreMaterial: materialNombre,
-                cantidad: cantidad,
-                fechaInicio: serverTimestamp(), // Fecha actual del servidor
+                cantidad: Number(cantidad),
+                fechaInicio: serverTimestamp(),
                 fechaDevolucion: new Date(fechaDevolucion),
-                estado: 'activo', 
+                estado: 'activo',
                 grupo: grupo
             });
             
-            // 4. Actualizar el stock en Realtime Database (esto ocurre fuera de la transacción de Firestore)
-            // La transacción de Firestore nos da la confianza para proceder con la actualización de RTDB.
             await update(ref(rtdb, 'materiales'), { 
-                [materialId + '/cantidad']: newStock
+                [`${materialId}/cantidad`]: newStock
             });
         });
 
-        // Si la transacción fue exitosa, devolvemos el código
         return NextResponse.json({ loanCode: loanCode }, { status: 201 });
 
     } catch (error: any) {
         console.error("Error en la transacción del préstamo:", error);
-        // Devolvemos el mensaje de error específico (ej. "Stock insuficiente...")
         return NextResponse.json({ message: error.message || 'Error interno del servidor.' }, { status: 500 });
     }
 }
