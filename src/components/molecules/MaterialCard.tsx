@@ -1,76 +1,38 @@
-// For chatbot catalog display
-// Props:
-//   - material: {
-//       id: string
-//       nombre: string
-//       categoria: string
-//       cantidad: number
-//       precio_unitario: number
-//     }
-//   - onSelect: (material, cantidad) => void
-//
-// Layout:
-// <div className="bg-white rounded-lg border p-4 hover:shadow-lg transition">
-//   <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center">
-//     <Package className="w-12 h-12 text-gray-400" />
-//   </div>
-//   <h3 className="font-semibold">{nombre}</h3>
-//   <p className="text-sm text-gray-500">{categoria}</p>
-//   <p className="text-xs text-gray-400">Disponibles: {cantidad}</p>
-//   <p className="text-lg font-bold text-[#e10022]">${precio_unitario} MXN</p>
-//   <Input type="number" min="1" max={cantidad} placeholder="Cantidad" />
-//   <Button onClick={() => onSelect(material, inputValue)}>
-//     Seleccionar
-//   </Button>
-// </div>
 
-import React, { useState } from 'react';
-import { Package } from 'lucide-react';
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+'use client';
+
+import React from 'react';
+
+export interface Material {
+  id: string;
+  nombre: string;
+  imagenUrl?: string; // O un emoji
+  stock: number;
+}
 
 interface MaterialCardProps {
-  material: {
-    id: string;
-    nombre: string;
-    categoria: string;
-    cantidad: number;
-    precio_unitario: number;
-  };
-  onSelect: (material: any, cantidad: number) => void;
+  material: Material;
+  onSelect: (material: Material) => void;
 }
 
 const MaterialCard: React.FC<MaterialCardProps> = ({ material, onSelect }) => {
-  const [inputValue, setInputValue] = useState('1');
-
-  const handleSelect = () => {
-    const cantidad = parseInt(inputValue);
-    if (cantidad > 0 && cantidad <= material.cantidad) {
-      onSelect(material, cantidad);
-    }
-  };
+  const isAvailable = material.stock > 0;
 
   return (
-    <div className="bg-white rounded-lg border p-4 hover:shadow-lg transition">
-      <div className="aspect-square bg-gray-100 rounded mb-3 flex items-center justify-center">
-        <Package className="w-12 h-12 text-gray-400" />
-      </div>
-      <h3 className="font-semibold">{material.nombre}</h3>
-      <p className="text-sm text-gray-500">{material.categoria}</p>
-      <p className="text-xs text-gray-400">Disponibles: {material.cantidad}</p>
-      <p className="text-lg font-bold text-[#e10022]">${material.precio_unitario} MXN</p>
-      <Input
-        type="number"
-        min="1"
-        max={material.cantidad}
-        placeholder="Cantidad"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        className="w-full mb-2"
-      />
-      <Button onClick={handleSelect}>
-        Seleccionar
-      </Button>
+    <div className="bg-white border border-gray-200 rounded-lg p-4 flex flex-col items-center text-center shadow-sm hover:shadow-md transition-shadow duration-200">
+      <div className="text-4xl mb-2">{material.imagenUrl || '📦'}</div>
+      <p className="font-bold text-gray-800">{material.nombre}</p>
+      <p className={`text-sm font-semibold ${isAvailable ? 'text-green-600' : 'text-red-600'}`}>
+        Disponible: {material.stock}
+      </p>
+      <button
+        onClick={() => onSelect(material)}
+        disabled={!isAvailable}
+        className="mt-4 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-full transition-colors duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
+        style={{ backgroundColor: isAvailable ? '#e10022' : undefined }}
+      >
+        Elegir
+      </button>
     </div>
   );
 };

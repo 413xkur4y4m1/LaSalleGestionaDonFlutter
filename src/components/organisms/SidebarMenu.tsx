@@ -10,8 +10,8 @@ import IconoCompletado from '../atoms/IconoCompletado';
 import IconoSalir from '../atoms/IconoSalir';
 import { toast } from 'sonner';
 import { signOut } from "next-auth/react";
-import { MessageSquare } from 'lucide-react'; // Importamos el ícono
-import { useRouter } from 'next/navigation'; // Importamos el router
+import IconoIA from '../atoms/IconoIA'; // Importamos el ícono de IA
+import { useRouter } from 'next/navigation';
 
 interface SidebarMenuProps {
   isOpen: boolean;
@@ -19,7 +19,7 @@ interface SidebarMenuProps {
 }
 
 const SidebarMenu: React.FC<SidebarMenuProps> = ({ isOpen, onClose }) => {
-  const router = useRouter(); // Inicializamos el router
+  const router = useRouter(); 
 
   const handleSignOut = async () => {
     const promise = () => new Promise((resolve) => signOut({ callbackUrl: '/' }).then(resolve));
@@ -33,7 +33,7 @@ const SidebarMenu: React.FC<SidebarMenuProps> = ({ isOpen, onClose }) => {
 
   const menuItems = [
     {
-      icon: <MessageSquare className="h-5 w-5" />,
+      icon: <IconoIA className="h-5 w-5" />, // Usamos el nuevo ícono
       label: 'Chatbot IA',
       onClick: () => {
         router.push('/chatbot');

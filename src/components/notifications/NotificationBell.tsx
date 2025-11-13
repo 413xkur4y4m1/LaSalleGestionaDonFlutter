@@ -60,7 +60,8 @@ export function NotificationBell() {
   return (
     <DropdownMenu onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger className="relative outline-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full p-2">
-        <Bell className="h-6 w-6 text-white" aria-label="Notificaciones" />
+        {/* Corregido: Se cambió text-white a un color visible sobre fondo blanco */}
+        <Bell className="h-6 w-6 text-gray-600 hover:text-gray-900" aria-label="Notificaciones" />
         {unreadCount > 0 && (
           <Badge
             variant="destructive"

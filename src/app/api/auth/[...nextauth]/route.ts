@@ -1,8 +1,6 @@
 
 import NextAuth, { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
-// INCORRECTO: import { createOrUpdateStudent } from "@/lib/firestore-operations";
-// CORRECTO: Importa la función del lado del servidor que usa el Admin SDK
 import { createOrUpdateStudentServer } from "@/lib/firestore-operations-server";
 
 const authOptions: NextAuthOptions = {
@@ -23,25 +21,27 @@ const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user }) {
       if (user) {
+        // Al iniciar sesión, pasamos los datos del usuario al token
         token.id = user.id;
         token.rol = user.rol || "estudiante";
+        token.grupo = user.grupo; // <-- AÑADIDO: Pasamos el grupo al token
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
+        // Desde el token, pasamos los datos a la sesión del cliente
         session.user.id = token.id as string;
         session.user.rol = token.rol as string;
+        session.user.grupo = token.grupo as string; // <-- AÑADIDO: Pasamos el grupo a la sesión
       }
       return session;
     },
   },
   events: {
-    // Usa la función del servidor en el evento signIn
     async signIn(message) {
       if (message.user.id && message.user.email) {
         try {
-          // Llama a la función correcta del Admin SDK
           await createOrUpdateStudentServer(message.user);
         } catch (error) {
           console.error("Error en createOrUpdateStudentServer:", error);

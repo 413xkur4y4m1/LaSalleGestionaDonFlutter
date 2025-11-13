@@ -5,7 +5,8 @@ import DashboardTemplate from '@/components/templates/DashboardTemplate';
 const ChatbotPage = () => {
   return (
     <DashboardTemplate>
-      <div className="h-[calc(100vh-12rem)]">
+      {/* Aumentamos la altura para que el chatbot sea más grande */}
+      <div className="h-[calc(100vh-8rem)]">
         <AIChatbot />
       </div>
     </DashboardTemplate>
