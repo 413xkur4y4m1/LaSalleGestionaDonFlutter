@@ -8,7 +8,7 @@ import IconoPagados from '../atoms/IconoPagados';
 import IconoCompletado from '../atoms/IconoCompletado';
 import IconoSalir from '../atoms/IconoSalir';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation';
+import { signOut } from "next-auth/react";
 
 interface SidebarMenuProps {
   isOpen: boolean;
@@ -16,7 +16,17 @@ interface SidebarMenuProps {
 }
 
 const SidebarMenu: React.FC<SidebarMenuProps> = ({ isOpen, onClose }) => {
-  const router = useRouter();
+
+  const handleSignOut = async () => {
+    // Muestra un toast de carga mientras se cierra la sesión
+    const promise = () => new Promise((resolve) => signOut({ callbackUrl: '/' }).then(resolve));
+    
+    toast.promise(promise, {
+      loading: 'Cerrando sesión...',
+      success: '¡Hasta pronto!',
+      error: 'No se pudo cerrar la sesión',
+    });
+  };
 
   const menuItems = [
     {
@@ -54,10 +64,7 @@ const SidebarMenu: React.FC<SidebarMenuProps> = ({ isOpen, onClose }) => {
     {
       icon: <IconoSalir />,
       label: 'Cerrar Sesión',
-      onClick: () => {
-        onClose();
-        router.push('/');
-      }
+      onClick: handleSignOut
     },
   ];
 

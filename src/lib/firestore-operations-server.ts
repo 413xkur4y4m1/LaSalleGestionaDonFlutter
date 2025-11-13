@@ -42,6 +42,11 @@ export const createOrUpdateStudentServer = async (user: any) => {
       fotoPerfil: user.image || "",
       createdAt: new Date(),
       lastLogin: new Date(),
+      // ✨ Campos añadidos para coincidir con tu estructura ✨
+      prestamos: [],
+      adeudos: [],
+      pagos: [],
+      completados: [],
     });
   } else {
     await studentRef.update({ lastLogin: new Date() });

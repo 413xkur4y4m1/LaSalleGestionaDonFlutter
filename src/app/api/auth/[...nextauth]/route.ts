@@ -2,7 +2,8 @@ import NextAuth, { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
 import { createOrUpdateStudent } from "@/lib/firestore-operations";
 
-export const authOptions: NextAuthOptions = {
+// NO se exporta esta constante. Solo se usa en este archivo.
+const authOptions: NextAuthOptions = {
   providers: [
     AzureADProvider({
       clientId: process.env.CLIENT_ID!,
@@ -62,4 +63,5 @@ export const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions);
 
+// Se exporta el handler para GET y POST, como espera el App Router.
 export { handler as GET, handler as POST };

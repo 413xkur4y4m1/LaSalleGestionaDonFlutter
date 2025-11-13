@@ -1,46 +1,89 @@
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase-config";
+import { doc, getDoc, setDoc, updateDoc, collection, addDoc, serverTimestamp, Timestamp, getDocs, query, where } from "firebase/firestore";
 
-interface StudentData {
+// --- INTERFACES ---
+
+export interface StudentData {
   uid: string;
   nombre: string;
   correo: string;
-  rol: string;
+  rol: "estudiante" | "admin";
   grupo: string;
   carrera: string;
   fotoPerfil: string;
-  createdAt: any; // Use any for Timestamp or Date
-  lastLogin: any; // Use any for Timestamp or Date
+  createdAt: Timestamp;
+  lastLogin: Timestamp;
+  prestamos: string[];
+  adeudos: string[];
+  pagos: string[];
+  completados: string[];
 }
 
-interface LoanData {
-  codigo: string;
-  nombreMaterial: string;
+export interface PrestamoData {
+  id?: string; // Opcional, para incluir el ID del documento
   cantidad: number;
-  precio_unitario: number;
-  precio_total: number;
-  fechaInicio: any;
-  fechaDevolucion: any;
-  estado: string;
+  codigo: string;
+  estado: "activo" | "vencido" | "devuelto";
+  fechaDevolucion: Timestamp;
+  fechaInicio: Timestamp;
   grupo: string;
-  createdAt: any;
+  nombreMaterial: string;
+  precio_total: number;
+  precio_unitario: number;
+  createdAt: Timestamp;
 }
+
+export interface AdeudoData {
+  id?: string;
+  cantidad: number;
+  codigo: string;
+  estado: "pendiente" | "pagado";
+  fechaVencimiento: Timestamp;
+  grupo: string;
+  moneda: "MXN";
+  nombreMaterial: string;
+  precio_ajustado: number;
+  precio_unitario: number;
+  tipo: "rotura" | "perdida" | "retraso";
+  prestamoId: string; // Vínculo al préstamo original
+  createdAt: Timestamp;
+}
+
+export interface PagoData {
+  id?: string;
+  codigoPago: string;
+  estado: "pagado";
+  fechaPago: Timestamp;
+  metodo: "en línea" | "efectivo";
+  nombreMaterial: string;
+  precio: number;
+  adeudoId: string; // Vínculo al adeudo original
+  createdAt: Timestamp;
+}
+
+export interface NotificacionData {
+  id?: string;
+  enviado: boolean;
+  fechaEnvio: Timestamp;
+  mensaje: string;
+  link?: string; // Link a la página relevante (e.g., mis adeudos)
+  tipo: "recordatorio" | "vencimiento" | "confirmacion_pago" | "nuevo_adeudo";
+  leido: boolean;
+  createdAt: Timestamp;
+}
+
+
+// --- OPERACIONES DE ESTUDIANTES (COLECCIÓN RAÍZ) ---
 
 export const getStudentData = async (uid: string): Promise<StudentData | null> => {
   const docRef = doc(db, "Estudiantes", uid);
   const docSnap = await getDoc(docRef);
-
-  if (docSnap.exists()) {
-    return docSnap.data() as StudentData;
-  } else {
-    return null;
-  }
+  return docSnap.exists() ? docSnap.data() as StudentData : null;
 };
 
 export const createOrUpdateStudent = async (user: any) => {
   const studentRef = doc(db, "Estudiantes", user.id);
   const studentSnap = await getDoc(studentRef);
-
   const isNewUser = !studentSnap.exists();
   let needsGrupo = false;
 
@@ -50,38 +93,51 @@ export const createOrUpdateStudent = async (user: any) => {
       nombre: user.name || "",
       correo: user.email || "",
       rol: "estudiante",
-      grupo: "", // Empty on creation, to be filled by modal
-      carrera: "turismo", // Default value as per spec
+      grupo: "",
+      carrera: "turismo",
       fotoPerfil: user.image || "",
       createdAt: serverTimestamp(),
       lastLogin: serverTimestamp(),
+      prestamos: [],
+      adeudos: [],
+      pagos: [],
+      completados: [],
     });
     needsGrupo = true;
   } else {
-    await updateDoc(studentRef, {
-      lastLogin: serverTimestamp(),
-    });
+    await updateDoc(studentRef, { lastLogin: serverTimestamp() });
     const data = studentSnap.data();
-    if (!data?.grupo) {
-      needsGrupo = true;
-    }
+    if (!data?.grupo) needsGrupo = true;
   }
-
   return { isNewUser, needsGrupo };
 };
 
 export const updateStudentGrupo = async (uid: string, grupo: string) => {
   const studentRef = doc(db, "Estudiantes", uid);
-  await updateDoc(studentRef, {
-    grupo: grupo.toUpperCase(),
-  });
+  await updateDoc(studentRef, { grupo: grupo.toUpperCase() });
 };
 
-export const createLoan = async (uid: string, loanData: any) => {
-  const loansCollectionRef = collection(db, "Estudiantes", uid, "Prestamos");
-  const docRef = await addDoc(loansCollectionRef, {
-    ...loanData,
-    createdAt: serverTimestamp(),
-  });
+
+// --- OPERACIONES DE SUB-COLECCIONES (CLIENT-SIDE) ---
+
+const createDocumentInSubcollection = async (studentUid: string, subcollectionName: string, data: object) => {
+  const subcollectionRef = collection(db, "Estudiantes", studentUid, subcollectionName);
+  const docData = { ...data, createdAt: serverTimestamp() };
+  const docRef = await addDoc(subcollectionRef, docData);
   return docRef.id;
 };
+
+export const createPrestamo = (studentUid: string, data: Omit<PrestamoData, 'createdAt' | 'id'>) => 
+  createDocumentInSubcollection(studentUid, "Prestamos", data);
+
+export const getNotifications = async (studentUid: string): Promise<NotificacionData[]> => {
+    const notificationsRef = collection(db, "Estudiantes", studentUid, "Notificaciones");
+    const q = query(notificationsRef);
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as NotificacionData));
+}
+
+export const markNotificationAsRead = async (studentUid: string, notificationId: string) => {
+    const notificationRef = doc(db, "Estudiantes", studentUid, "Notificaciones", notificationId);
+    await updateDoc(notificationRef, { leido: true });
+}
