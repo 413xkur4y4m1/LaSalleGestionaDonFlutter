@@ -1,17 +1,7 @@
-// Combines: Avatar + Dropdown (Shadcn)
-// Shows:
-//   - Avatar image
-//   - Dropdown on click:
-//     * Nombre estudiante
-//     * Correo
-//     * Divider
-//     * "Cerrar sesión" → signOut()
-//
-// Props: user: { nombre, correo, fotoPerfil }
 
 import React from 'react';
 import { signOut } from 'next-auth/react';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import CustomAvatar from '../atoms/Avatar';
 
 interface UserMenuProps {
@@ -30,7 +20,8 @@ const UserMenu: React.FC<UserMenuProps> = ({ user }) => {
         <DropdownMenuItem disabled>{user.nombre}</DropdownMenuItem>
         <DropdownMenuItem disabled>{user.correo}</DropdownMenuItem>
         <DropdownMenuItem>
-          <button onClick={() => signOut()}>Cerrar sesión</button>
+          {/* CORRECCIÓN: Se agrega callbackUrl para redirigir a la página de inicio después de cerrar sesión */}
+          <button onClick={() => signOut({ callbackUrl: '/' })}>Cerrar sesión</button>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

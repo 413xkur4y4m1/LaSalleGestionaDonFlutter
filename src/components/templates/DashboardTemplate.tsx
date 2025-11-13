@@ -1,9 +1,9 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
 import TopNavbar from '../organisms/TopNavbar';
 import SidebarMenu from '../organisms/SidebarMenu';
-import Chatbot from '../organisms/Chatbot';
 import GrupoModal from '../organisms/GrupoModal';
 import * as firestoreOperations from '@/lib/firestore-operations';
 import { getAuth} from "firebase/auth";
@@ -73,7 +73,7 @@ const DashboardTemplate: React.FC<DashboardTemplateProps> = ({ children }) => {
         </main>
       </div>
 
-      <Chatbot />
+      {/* <Chatbot /> // Se ha eliminado para que no sea flotante */}
     </div>
   );
 };

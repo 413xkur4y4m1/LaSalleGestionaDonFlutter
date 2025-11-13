@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -9,6 +10,8 @@ import IconoCompletado from '../atoms/IconoCompletado';
 import IconoSalir from '../atoms/IconoSalir';
 import { toast } from 'sonner';
 import { signOut } from "next-auth/react";
+import { MessageSquare } from 'lucide-react'; // Importamos el ícono
+import { useRouter } from 'next/navigation'; // Importamos el router
 
 interface SidebarMenuProps {
   isOpen: boolean;
@@ -16,9 +19,9 @@ interface SidebarMenuProps {
 }
 
 const SidebarMenu: React.FC<SidebarMenuProps> = ({ isOpen, onClose }) => {
+  const router = useRouter(); // Inicializamos el router
 
   const handleSignOut = async () => {
-    // Muestra un toast de carga mientras se cierra la sesión
     const promise = () => new Promise((resolve) => signOut({ callbackUrl: '/' }).then(resolve));
     
     toast.promise(promise, {
@@ -29,6 +32,14 @@ const SidebarMenu: React.FC<SidebarMenuProps> = ({ isOpen, onClose }) => {
   };
 
   const menuItems = [
+    {
+      icon: <MessageSquare className="h-5 w-5" />,
+      label: 'Chatbot IA',
+      onClick: () => {
+        router.push('/chatbot');
+        if (window.innerWidth < 768) onClose();
+      },
+    },
     {
       icon: <IconoPrestamo />,
       label: 'Préstamos',

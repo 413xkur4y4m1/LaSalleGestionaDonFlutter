@@ -1,8 +1,10 @@
+
 import NextAuth, { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
-import { createOrUpdateStudent } from "@/lib/firestore-operations";
+// INCORRECTO: import { createOrUpdateStudent } from "@/lib/firestore-operations";
+// CORRECTO: Importa la función del lado del servidor que usa el Admin SDK
+import { createOrUpdateStudentServer } from "@/lib/firestore-operations-server";
 
-// NO se exporta esta constante. Solo se usa en este archivo.
 const authOptions: NextAuthOptions = {
   providers: [
     AzureADProvider({
@@ -12,17 +14,13 @@ const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    // 1. signIn Callback: controla si un usuario puede iniciar sesión
     async signIn({ user }) {
-      // Permite solo correos institucionales
       if (user.email && user.email.endsWith("@ulsaneza.edu.mx")) {
         return true;
       }
       console.log(`Sign-in denegado para el correo: ${user.email}`);
       return false;
     },
-
-    // 2. JWT Callback: agrega datos personalizados al token
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -30,8 +28,6 @@ const authOptions: NextAuthOptions = {
       }
       return token;
     },
-
-    // 3. Session Callback: agrega datos del token a la sesión
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
@@ -41,20 +37,21 @@ const authOptions: NextAuthOptions = {
     },
   },
   events: {
-    // 4. signIn Event: se ejecuta después de un inicio de sesión exitoso
+    // Usa la función del servidor en el evento signIn
     async signIn(message) {
       if (message.user.id && message.user.email) {
         try {
-          await createOrUpdateStudent(message.user);
+          // Llama a la función correcta del Admin SDK
+          await createOrUpdateStudentServer(message.user);
         } catch (error) {
-          console.error("Error en createOrUpdateStudent:", error);
+          console.error("Error en createOrUpdateStudentServer:", error);
         }
       }
     },
   },
   pages: {
-    signIn: "/", // Página de inicio de sesión
-    error: "/",  // Página de error
+    signIn: "/",
+    error: "/",
   },
   session: {
     strategy: "jwt",
@@ -63,5 +60,4 @@ const authOptions: NextAuthOptions = {
 
 const handler = NextAuth(authOptions);
 
-// Se exporta el handler para GET y POST, como espera el App Router.
 export { handler as GET, handler as POST };
