@@ -32,12 +32,13 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "La cuenta no tiene un correo electrónico asociado." }, { status: 500 });
         }
 
-        // --- FIX: Asegurar que el OTP siempre tenga 5 dígitos ---
-        const otp = Math.floor(10000 + Math.random() * 90000).toString();
+        // --- FIX: Asegurar que el OTP siempre tenga 6 dígitos ---
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        const expiresAt = Timestamp.fromMillis(Date.now() + 15 * 60 * 1000);
+        const expiresAt = Timestamp.fromMillis(Date.now() + 15 * 60 * 1000); // 15 minutos de expiración
 
-        await adminDb.collection('admin_auth_codes').doc().set({
+        // Almacenar el código en Firestore para su posterior verificación
+        await adminDb.collection('admin_auth_codes').add({
             adminId,
             otp,
             createdAt: Timestamp.now(),
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
             used: false
         });
 
+        // Enviar el correo electrónico con el código
         const emailResult = await sendAdminOtpEmail(email, otp);
 
         if (!emailResult.success) {
@@ -53,12 +55,13 @@ export async function POST(request: Request) {
                 email: email,
                 errorDetails: (emailResult.error as any)?.message || emailResult.error
             });
-            return NextResponse.json({ message: "El servicio de correo no respondió. Revisa las credenciales de correo en tu .env.local" }, { status: 502 });
+            // Es crucial informar al frontend que el correo no se pudo enviar
+            return NextResponse.json({ message: "El servicio de correo no respondió. Revisa las credenciales de correo en tu .env.local" }, { status: 502 }); // Bad Gateway
         }
 
         return NextResponse.json({ 
-            message: "Se ha enviado un código de acceso a tu correo.", 
-            email: email 
+            message: `Se ha enviado un código de acceso a tu correo.`, 
+            email: email // Devolver el email para mostrarlo en el frontend
         });
 
     } catch (error) {
