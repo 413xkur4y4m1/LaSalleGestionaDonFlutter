@@ -1,92 +1,33 @@
+
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+// CORRECCIÓN FINAL: La ruta correcta es @/ai/genkit, no @/lib/genkit
+import { ai } from '@/ai/genkit';
 
-// NOTE: Genkit initialization (structure only, no real API key usage)
-// User will add actual Genkit SDK calls
-
+// --- ENDPOINT DE LA API DE GENKIT ---
 export async function POST(req: NextRequest) {
   try {
-    
-    const { message, action } = await req.json();
+    const { history, prompt } = await req.json();
 
-    // Route based on action
-    switch (action) {
-      case 'send_message':
-        return await handleMessage(message, '');
-
-      case 'request_catalog':
-        return await fetchMaterialCatalog();
-
-      case 'create_loan':
-        return await createLoanRequest(req.body, '');
-
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    if (!prompt) {
+      return NextResponse.json({ error: 'El prompt es requerido.' }, { status: 400 });
     }
-  } catch (error) {
-    console.error('Genkit API error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  }
-}
 
-// Handle general message (intent detection)
-async function handleMessage(message: string, userId: string) {
-  // TODO: Add Genkit intent detection
-  // For now, simple keyword matching
-
-  const lowerMessage = message.toLowerCase();
-
-  if (lowerMessage.includes('préstamo') || lowerMessage.includes('pedir')) {
-    return NextResponse.json({
-      response: '¡Perfecto! Voy a mostrarte el catálogo de materiales disponibles.',
-      nextAction: 'show_catalog'
+    const llmResponse = await ai.generate({
+      model: 'googleai/gemini-pro', // Cambiado a gemini-pro que es más común, puedes ajustarlo.
+      prompt: `Eres un asistente de laboratorio llamado Gastrobot. Tu misión es ser amable, servicial y responder de forma clara y concisa. Historial del chat: ${JSON.stringify(history)}. Pregunta del usuario: ${prompt}`,
+      config: {
+        temperature: 0.5,
+      },
     });
+
+    // Retornamos la respuesta de texto generada
+    return NextResponse.json({ response: llmResponse.text }, { status: 200 });
+
+  } catch (error: any) {
+    console.error('Error en la API de Genkit:', error);
+    return NextResponse.json(
+      { error: error.message || 'Error interno al procesar la solicitud de Genkit.' },
+      { status: 500 }
+    );
   }
-
-  if (lowerMessage.includes('ayuda') || lowerMessage.includes('cómo')) {
-    return NextResponse.json({
-      response: 'Puedo ayudarte a:\n• Solicitar un préstamo de material\n• Consultar tus préstamos activos\n• Responder preguntas sobre el sistema\n\n¿Qué necesitas?',
-      nextAction: null
-    });
-  }
-
-  return NextResponse.json({
-    response: 'Entiendo. ¿En qué más puedo ayudarte? Puedes pedirme un préstamo o hacer preguntas sobre el sistema.',
-    nextAction: null
-  });
-}
-
-// Fetch materials from Firestore
-async function fetchMaterialCatalog() {
-  const materialsRef = collection(db, 'materials');
-  const snapshot = await getDocs(materialsRef);
-
-  const materials = snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
-
-  return NextResponse.json({
-    materials,
-    message: 'Catálogo cargado exitosamente'
-  });
-}
-
-// Create loan request
-async function createLoanRequest(data: any, userId: string) {
-  const { materialId, cantidad, fechaDevolucion } = data;
-
-  // Generate loan code
-  const codigo = `PRST-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
-
-  // TODO: Save to Firestore Estudiantes/{userId}/Prestamos
-  // TODO: Update materials inventory
-  // TODO: Send Outlook notification
-
-  return NextResponse.json({
-    success: true,
-    codigo,
-    message: 'Préstamo creado exitosamente'
-  });
 }
