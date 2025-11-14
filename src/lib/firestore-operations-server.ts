@@ -1,54 +1,60 @@
 // File: src/lib/firestore-operations-server.ts
 import * as admin from "firebase-admin";
 
-// 🔹 Función de inicialización Lazy de Firebase Admin
+/**
+ * 🔹 Inicialización lazy de Firebase Admin.
+ * Protege contra múltiples inicializaciones.
+ * Convierte los "\n" literales en saltos de línea reales.
+ */
 function initializeAdmin() {
   if (!admin.apps.length) {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY no está definido en el entorno.");
+      throw new Error(
+        "FIREBASE_SERVICE_ACCOUNT_KEY no está definido en las variables de entorno."
+      );
     }
 
-    // Decodificar la clave de servicio de Base64, que es más robusto
+    // Decodificar Base64
     const serviceAccountJson = Buffer.from(
       process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
       "base64"
     ).toString("utf-8");
-    const serviceAccount = JSON.parse(serviceAccountJson);
+
+    // Reemplazar "\n" literales por saltos de línea reales
+    const serviceAccount = JSON.parse(
+      serviceAccountJson.replace(/\\n/g, "\n")
+    );
 
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
     });
   }
+
   return admin;
 }
 
 /**
- * Obtiene la instancia de la base de datos de Firestore del lado del servidor.
- * Usa la inicialización de Admin SDK.
+ * Obtiene la instancia de Firestore del lado del servidor.
  */
 export function getDb() {
   return initializeAdmin().firestore();
 }
 
 /**
- * Crea un nuevo estudiante en Firestore si no existe, o actualiza su fecha de último login.
- * Extrae el grupo del correo electrónico del estudiante.
+ * Crea o actualiza un estudiante en Firestore.
+ * Extrae automáticamente el grupo desde el correo.
  */
 export const createOrUpdateStudentServer = async (user: any) => {
   const db = getDb();
 
-  // Lógica para extraer el grupo desde el email (ej: roberto.perez.103m@ulsaneza.edu.mx)
   const extractGrupoFromEmail = (email: string): string => {
     if (!email || !email.endsWith("@ulsaneza.edu.mx")) return "";
-    const username = email.split('@')[0];
-    const parts = username.split('.');
-    if (parts.length < 2) return ""; // No hay suficiente información
-    
+    const username = email.split("@")[0];
+    const parts = username.split(".");
+    if (parts.length < 2) return "";
+
     const potentialGroup = parts[parts.length - 1].toUpperCase();
-    // Un regex simple para validar que parece un grupo (ej: 101, 203M, 1101A)
-    if (/^\d{2,4}[A-Z]?$/.test(potentialGroup)) {
-      return potentialGroup;
-    }
+    if (/^\d{2,4}[A-Z]?$/.test(potentialGroup)) return potentialGroup;
     return "";
   };
 
@@ -57,12 +63,13 @@ export const createOrUpdateStudentServer = async (user: any) => {
 
   if (!studentSnap.exists) {
     const grupo = extractGrupoFromEmail(user.email);
+
     await studentRef.set({
       uid: user.id,
       nombre: user.name || "",
       correo: user.email || "",
       rol: "estudiante",
-      grupo: grupo, // Asignamos el grupo extraído
+      grupo,
       carrera: "turismo",
       fotoPerfil: user.image || "",
       createdAt: new Date(),
