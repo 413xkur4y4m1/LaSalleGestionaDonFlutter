@@ -1,13 +1,14 @@
+
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 
-// --- JSON de servicio hardcodeado ---
+// --- JSON de servicio hardcodeado (SIN CAMBIOS) ---
 const serviceAccount = {
   type: "service_account",
   project_id: "bdsql-9416f",
   clientEmail: "firebase-adminsdk-fbsvc@bdsql-9416f.iam.gserviceaccount.com",
   private_key_id: "801f194a0f09d4eea7daf1e8f7c3b8c10f3410a7",
-    privateKey: `-----BEGIN PRIVATE KEY-----
+  privateKey: `-----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC/r88klYA4rKeB
 w3iFmQ7FScjpO5BciLSuiIqr8DbV5Z85pR1hrDQH4QwVxqSkcBrTNPdK3s1J9Fvo
 wfjX+UxKrfl84Zz/oGmbsaLdugrcQvM3pIzvfkrhcw2IMXiMs4GTglMOpkaGEpMi
@@ -36,11 +37,12 @@ fvbHdbHEZKhzpULMbPb3Y+QS4ckQPNOAxMy9+vFNs5AGCeb0+bTTA4DvNo80aMj8
 dmJC9opEer5lqw9ICaJB8Tgj
 -----END PRIVATE KEY-----\n`,
 };
-// --- INICIALIZACIÓN DE FIREBASE ADMIN ---
+// --
+// --- INICIALIZACIÓN DE FIREBASE ADMIN (SIN CAMBIOS) ---
 function initializeAdmin() {
   if (!admin.apps.length) {
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
+      credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
     });
   }
   return admin;
@@ -50,7 +52,7 @@ export function getDb() {
   return initializeAdmin().firestore();
 }
 
-// --- TIPADO PARA EL OBJETO DE USUARIO ---
+// --- TIPADO PARA EL OBJETO DE USUARIO (SIN CAMBIOS) ---
 export interface StudentData {
   id: string;
   name: string | null;
@@ -60,25 +62,44 @@ export interface StudentData {
   grupo: string | null;
 }
 
-// --- FUNCIÓN REFACTORIZADA ---
+// ✅ --- NUEVA FUNCIÓN AUXILIAR ---
 /**
- * Crea un nuevo estudiante si no existe, o actualiza sus datos si ya existe.
- * ✅ Ahora también inicializa las subcolecciones requeridas para un nuevo estudiante.
+ * Se asegura de que todas las subcolecciones requeridas existan para un estudiante.
+ * Si una subcolección no existe o está vacía, crea un documento placeholder.
  */
+async function ensureSubcollectionsExist(studentRef: admin.firestore.DocumentReference) {
+  console.log(`Verificando subcolecciones para ${studentRef.id}...`);
+  const subcollections = ["Prestamos", "Adeudos", "Pagados", "Completados", "Formularios", "Notificaciones"];
+  const placeholder = {
+    initializedAt: FieldValue.serverTimestamp(),
+    _info: "Documento placeholder para inicializar la colección.",
+  };
+
+  for (const subcollectionName of subcollections) {
+    const subcollectionRef = studentRef.collection(subcollectionName);
+    const snapshot = await subcollectionRef.limit(1).get();
+    
+    // Si la subcolección está vacía (no tiene ni un solo documento), la inicializamos.
+    if (snapshot.empty) {
+      console.log(`Inicializando subcolección faltante: '${subcollectionName}' para ${studentRef.id}`);
+      await subcollectionRef.doc("_placeholder").set(placeholder);
+    }
+  }
+}
+
+// --- FUNCIÓN PRINCIPAL MODIFICADA ---
 export const createOrUpdateStudentServer = async (user: StudentData) => {
   const db = getDb();
 
   if (!user.id) {
-    throw new Error(
-      "Se requiere un ID de usuario para crear o actualizar el estudiante."
-    );
+    throw new Error("Se requiere un ID de usuario para crear o actualizar el estudiante.");
   }
 
   const studentRef = db.collection("Estudiantes").doc(user.id);
   const studentSnap = await studentRef.get();
 
   if (!studentSnap.exists) {
-    // --- CREAR NUEVO ESTUDIANTE ---
+    // --- CREAR NUEVO ESTUDIANTE (Lógica sin cambios) ---
     console.log(`Creando nuevo estudiante con id: ${user.id}`);
     await studentRef.set({
       uid: user.id,
@@ -95,38 +116,18 @@ export const createOrUpdateStudentServer = async (user: StudentData) => {
       pagos: [],
       completados: [],
     });
-
-    // ✅ Inicializa las subcolecciones
-    console.log(`Inicializando subcolecciones para el estudiante: ${user.id}`);
-    const subcollections = [
-      "Prestamos",
-      "Adeudos",
-      "Pagados",
-      "Completados",
-      "Formularios",
-      "Notificaciones",
-    ];
-    const placeholder = {
-      initializedAt: FieldValue.serverTimestamp(),
-      _info: "Documento placeholder para inicializar la colección.",
-    };
-
-    for (const subcollection of subcollections) {
-      await studentRef
-        .collection(subcollection)
-        .doc("_placeholder")
-        .set(placeholder);
-    }
-    console.log(`Subcolecciones inicializadas con éxito para ${user.id}`);
   } else {
-    // --- ACTUALIZAR ESTUDIANTE EXISTENTE ---
-    console.log(
-      `Actualizando datos para el estudiante existente: ${user.id}`
-    );
+    // --- ACTUALIZAR ESTUDIANTE EXISTENTE (Lógica sin cambios) ---
+    console.log(`Actualizando datos para el estudiante existente: ${user.id}`);
     await studentRef.update({
       nombre: user.name ?? "",
       fotoPerfil: user.image ?? "",
       lastLogin: FieldValue.serverTimestamp(),
     });
   }
+  
+  // ✅ --- LLAMADA A LA FUNCIÓN DE VERIFICACIÓN ---
+  // Se ejecuta SIEMPRE, garantizando que las subcolecciones existan
+  // tanto para usuarios nuevos como para los ya existentes.
+  await ensureSubcollectionsExist(studentRef);
 };

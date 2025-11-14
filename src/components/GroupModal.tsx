@@ -6,34 +6,30 @@ import { useState, useEffect } from 'react';
 import { updateStudentGroup } from '@/app/actions';
 
 export default function GroupModal() {
-  const { data: session, status } = useSession();
+  // ✅ 1. Obtenemos la función `update` de useSession
+  const { data: session, status, update } = useSession();
   const [showModal, setShowModal] = useState(false);
   const [group, setGroup] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Determina si el modal debe mostrarse
   useEffect(() => {
-    // El status 'authenticated' asegura que ya tenemos una sesión cargada.
-    // La condición clave es que el usuario exista pero su 'grupo' sea null o undefined.
     if (status === 'authenticated' && session?.user && !session.user.grupo) {
-        // Usamos un pequeño delay para asegurar que la UI principal se estabilice
-        const timer = setTimeout(() => setShowModal(true), 1000);
-        return () => clearTimeout(timer); // Limpieza del timer
+      const timer = setTimeout(() => setShowModal(true), 1000);
+      return () => clearTimeout(timer);
     } else {
-        setShowModal(false);
+      setShowModal(false);
     }
   }, [session, status]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validación simple
     if (!group.trim()) {
       setError('Por favor, ingresa tu grupo.');
       return;
     }
-    if (!/\d{3}[A-Z]?/i.test(group)) {
+    if (!/^\d{3}[A-Z]?$/i.test(group)) {
         setError('El formato del grupo no es válido. Ejemplo: 101, 203M.');
         return;
     }
@@ -44,9 +40,13 @@ export default function GroupModal() {
     const result = await updateStudentGroup(session!.user.id, group.trim());
 
     if (result.success) {
+      // ✅ 2. ¡LA MAGIA!
+      // Forzamos a NextAuth a refrescar su token/sesión con los datos actualizados de la DB.
+      await update(); 
+      
+      // 3. Ocultamos el modal. No es necesario recargar la página.
       setShowModal(false);
-      // Opcional: Forzar un refresh de la sesión para que los datos se actualicen en el cliente inmediatamente
-      window.location.reload(); 
+
     } else {
       setError(result.error || 'Ocurrió un error inesperado.');
     }
@@ -54,12 +54,10 @@ export default function GroupModal() {
     setIsLoading(false);
   };
 
-  // No renderizar nada si el modal no debe mostrarse
   if (!showModal) {
     return null;
   }
 
-  // Render del Modal
   return (
     <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex justify-center items-center">
       <div className="bg-white p-8 rounded-lg shadow-2xl max-w-sm w-full mx-4">
