@@ -1,7 +1,9 @@
+
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import NextAuthProvider from '@/components/providers/NextAuthProvider';
+import GroupModal from '@/components/GroupModal'; // <-- 1. Importa el componente
 
 export const metadata: Metadata = {
   title: 'LaSalle Gestiona Portal',
@@ -24,6 +26,7 @@ export default function RootLayout({
       <NextAuthProvider>
           {children}
           <Toaster />
+          <GroupModal /> {/* <-- 2. Añade el modal aquí */}
           </NextAuthProvider>
       </body>
     </html>
