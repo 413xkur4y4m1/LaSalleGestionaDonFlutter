@@ -8,17 +8,15 @@ function getAdmin() {
       throw new Error("FIREBASE_SERVICE_ACCOUNT_KEY no está definido en el entorno.");
     }
 
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-    const privateKey = serviceAccount.private_key
-      .replace(/\\n/g, "\n")  // reemplaza \n escapados
-      .replace(/\r?\n/g, "\n"); // normaliza saltos de línea reales
+    // Decodificar la clave de servicio de Base64
+    const serviceAccountJson = Buffer.from(
+      process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+      "base64"
+    ).toString("utf-8");
+    const serviceAccount = JSON.parse(serviceAccountJson);
 
     admin.initializeApp({
-      credential: admin.credential.cert({
-        projectId: serviceAccount.project_id,
-        clientEmail: serviceAccount.client_email,
-        privateKey,
-      }),
+      credential: admin.credential.cert(serviceAccount),
     });
   }
   return admin;
@@ -42,7 +40,6 @@ export const createOrUpdateStudentServer = async (user: any) => {
       fotoPerfil: user.image || "",
       createdAt: new Date(),
       lastLogin: new Date(),
-      // ✨ Campos añadidos para coincidir con tu estructura ✨
       prestamos: [],
       adeudos: [],
       pagos: [],
