@@ -46,7 +46,7 @@ const AdminLoginStep1 = ({ onVerify, isLoading }: { onVerify: (account: string) 
 // --- Componente para el Paso 2: Ingreso del Código OTP ---
 const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (otp: string) => void, onBack: () => void, email: string, isLoading: boolean }) => {
     const [otp, setOtp] = useState(new Array(6).fill(''));
-    const [timer, setTimer] = useState(15 * 60); // 15 minutos en segundos
+    const [timer, setTimer] = useState(15 * 60);
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     useEffect(() => {
@@ -98,7 +98,7 @@ const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (
                         ⏱️ Código válido por {minutes}:{seconds.toString().padStart(2, '0')}
                     </div>
                     <button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || otp.join('').length !== 6 || timer === 0}>
-                         {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Ingresando...' : 'Verificar y Entrar'}
+                         {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Verificar y Entrar' : 'Verificar y Entrar'}
                     </button>
                 </form>
                 <Button variant="link" onClick={onBack} className="mt-4 text-gray-600 flex items-center justify-center w-full">
@@ -131,13 +131,10 @@ const AdminLoginPage = () => {
         if (!response.ok) {
             throw new Error(data.message || 'Ocurrió un error al verificar la cuenta.');
         }
-
-        // Asumimos que la API que genera el OTP devuelve el email para mostrarlo
-        const responseEmail = account.toLowerCase() + '@ulsaneza.edu.mx'; // Placeholder, la API debería devolver el email real
-
-        toast.success(data.message || `¡Se ha enviado un código a tu correo!`);
+        
+        toast.success(data.message || '¡Revisa tu correo para obtener tu código!');
         setAdminOTAccount(account);
-        setVerifiedEmail(responseEmail);
+        setVerifiedEmail(data.email); // FIX: Usar el email real de la respuesta de la API
         setStep(2);
 
     } catch (error: any) {
@@ -163,13 +160,12 @@ const AdminLoginPage = () => {
         }
 
         toast.success(data.message || '¡Acceso concedido!');
-        router.push('/admin/dashboard'); // ¡Redirección al éxito!
+        router.push('/admin/dashboard');
 
     } catch (error: any) {
         toast.error(error.message);
-        setIsLoading(false); // Solo detenemos el loading en caso de error para que puedan reintentar
+        setIsLoading(false);
     }
-    // No ponemos setIsLoading(false) en el caso de éxito porque la página va a redirigir
   };
 
   const handleGoBack = () => {

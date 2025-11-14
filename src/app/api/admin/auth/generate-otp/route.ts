@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { sendAdminOtpEmail } from '@/lib/email-server'; // ¡Importamos el poder de Azure!
+import { sendAdminOtpEmail } from '@/lib/email-server';
 
 /**
  * Generates a one-time password (OTP) and sends it to the admin's email.
@@ -35,8 +35,7 @@ export async function POST(request: Request) {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiresAt = Timestamp.fromMillis(Date.now() + 15 * 60 * 1000);
 
-        const otpRef = adminDb.collection('admin_auth_codes').doc();
-        await otpRef.set({
+        await adminDb.collection('admin_auth_codes').doc().set({
             adminId,
             otp,
             createdAt: Timestamp.now(),
@@ -44,20 +43,27 @@ export async function POST(request: Request) {
             used: false
         });
 
-        // ¡FUEGO REAL! Llamamos a nuestro lanzallamas de Azure.
         const emailResult = await sendAdminOtpEmail(email, otp);
 
         if (!emailResult.success) {
-            // Si el correo falla, no debemos bloquear al usuario, pero sí registrar el error.
-            console.error("CRITICAL: Email sending failed. OTP was generated but not sent.", emailResult.error);
-            // Podríamos decidir si devolver un error genérico o no. Por ahora, informamos al cliente.
-            return NextResponse.json({ message: "No se pudo enviar el correo de autenticación. Por favor, inténtalo más tarde." }, { status: 502 }); // Bad Gateway, as we failed to communicate with an upstream service.
+            // Error mejorado: Log detallado en el servidor para depuración
+            console.error("CRITICAL: Fallo en el envío de correo. Revisa las credenciales de Azure.", {
+                adminId: adminId,
+                email: email,
+                errorDetails: (emailResult.error as any)?.message || emailResult.error
+            });
+            // Mensaje de error más específico para el cliente
+            return NextResponse.json({ message: "El servicio de correo no respondió. Verifica las credenciales del sistema e inténtalo de nuevo." }, { status: 502 });
         }
 
-        return NextResponse.json({ message: `Se ha enviado un código de acceso a ${email}.` });
+        // FIX: Devolver el email en la respuesta para que el Step 2 lo muestre
+        return NextResponse.json({ 
+            message: "Se ha enviado un código de acceso a tu correo.", 
+            email: email 
+        });
 
     } catch (error) {
-        console.error("Error en generate-otp:", error);
+        console.error("Error fatal en generate-otp:", error);
         return NextResponse.json({ message: "Error interno del servidor." }, { status: 500 });
     }
 }
