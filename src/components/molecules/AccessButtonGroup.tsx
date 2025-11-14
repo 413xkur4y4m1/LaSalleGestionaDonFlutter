@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useRouter } from "next/navigation";
@@ -12,6 +13,11 @@ const AccessButtonGroup = () => {
     router.push("/login");
   };
 
+  // ¡NUEVA FUNCIÓN PARA EL LOGIN DE ADMIN!
+  const handleAdminLogin = () => {
+    router.push("/admin/login");
+  };
+
   return (
     <div className="flex flex-col gap-4 items-center md:flex-row md:justify-center md:gap-6 xl:gap-8">
       <ButtonGradient
@@ -24,6 +30,7 @@ const AccessButtonGroup = () => {
       <ButtonOutline
         icon={<Settings className="h-5 w-5" />}
         className="w-full max-w-sm md:w-auto justify-center"
+        onClick={handleAdminLogin} // ¡ACCIÓN AÑADIDA!
       >
         Entrar como Administrador
       </ButtonOutline>
