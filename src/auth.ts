@@ -1,11 +1,13 @@
+
 import { NextAuthOptions } from "next-auth";
 import AzureADProvider from "next-auth/providers/azure-ad";
-import { createOrUpdateStudentServer } from "@/lib/firestore-operations-server";
+import {
+  createOrUpdateStudentServer,
+  getStudentById,
+} from "@/lib/firestore-operations-server";
 
-// Helper para extraer el grupo del email.
 const extractGrupoFromEmail = (email: string | null | undefined): string | null => {
   if (!email) return null;
-  // La regex busca correos de alumnos de la UACJ.
   const match = email.match(/^al\.(.+?)\d+@alumnos\.uacj\.mx$/);
   return match ? match[1].toUpperCase() : null;
 };
@@ -16,11 +18,7 @@ export const authOptions: NextAuthOptions = {
       clientId: process.env.CLIENT_ID!,
       clientSecret: process.env.CLIENT_SECRET!,
       tenantId: process.env.TENANT_ID!,
-      authorization: {
-        params: {
-          scope: "openid profile user.Read email",
-        },
-      },
+      authorization: { params: { scope: "openid profile user.Read email" } },
     }),
   ],
   callbacks: {
@@ -32,43 +30,60 @@ export const authOptions: NextAuthOptions = {
       console.log(`Sign-in denegado para el correo: ${user.email}`);
       return false;
     },
-    async jwt({ token, user }) {
+
+    // ✅ --- EL NUEVO CEREBRO DE LA AUTENTICACIÓN ---
+    async jwt({ token, user, trigger }) {
+      // ---- Se ejecuta solo en el LOGIN inicial ----
       if (user) {
+        console.log("JWT: Login inicial detectado.");
+        // Llamamos a la función que crea/actualiza en la DB AQUI MISMO.
+        // Esto evita las carreras de código.
+        await createOrUpdateStudentServer({
+          id: user.id,
+          name: user.name ?? null,
+          email: user.email ?? null,
+          image: user.image ?? null,
+          rol: "estudiante",
+          grupo: extractGrupoFromEmail(user.email),
+        });
+
+        // Ahora leemos desde la DB para asegurarnos de tener los datos correctos.
+        const studentData = await getStudentById(user.id);
+
         token.id = user.id;
         token.rol = "estudiante";
-        token.grupo = extractGrupoFromEmail(user.email ?? null) ?? undefined;
+        token.grupo = studentData?.grupo ?? undefined;
+        console.log("JWT: Token inicial creado", token);
+        return token;
       }
+
+      // ---- Se ejecuta cuando llamas `update()` o en cada navegación ----
+      // Si el token no tiene grupo, o si forzamos la actualización, vamos a la DB.
+      if (trigger === "update" || !token.grupo) {
+        console.log(`JWT: Refrescando token. Trigger: ${trigger}, Grupo actual: ${token.grupo}`);
+        const studentData = await getStudentById(token.id as string);
+        if (studentData?.grupo) {
+          console.log(`JWT: Grupo '${studentData.grupo}' encontrado en DB. Token actualizado.`);
+          token.grupo = studentData.grupo;
+        }
+      }
+
       return token;
     },
+
     async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.rol = token.rol as string;
-        (session.user as any).grupo = token.grupo ?? null;
-      }
+      // La sesión solo refleja lo que el token (ya verificado) le dice.
+      session.user.id = token.id as string;
+      session.user.rol = token.rol as string;
+      (session.user as any).grupo = token.grupo ?? null;
       return session;
     },
   },
-  events: {
-    async signIn(message) {
-      const user = message.user; // ✅ Corregido: ahora usamos message.user
-      if (user.id && user.email) {
-        try {
-          const grupo = extractGrupoFromEmail(user.email);
-          await createOrUpdateStudentServer({
-            id: user.id,
-            name: user.name ?? null, // ✅ user.name existe aquí
-            email: user.email,
-            image: user.image ?? null, // ✅ user.image existe aquí
-            rol: "estudiante",
-            grupo: grupo,
-          });
-        } catch (e) {
-          console.error("Error en createOrUpdateStudentServer:", e);
-        }
-      }
-    },
-  },
+
+  // ❌ --- ELIMINAMOS EL BLOQUE DE EVENTOS --- 
+  // Su lógica ahora vive en el callback `jwt` para evitar carreras.
+  events: {},
+
   pages: {
     signIn: "/",
     error: "/",
