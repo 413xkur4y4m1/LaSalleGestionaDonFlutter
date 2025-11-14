@@ -32,7 +32,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "La cuenta no tiene un correo electrónico asociado." }, { status: 500 });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // --- FIX: Asegurar que el OTP siempre tenga 5 dígitos ---
+        const otp = Math.floor(10000 + Math.random() * 90000).toString();
+
         const expiresAt = Timestamp.fromMillis(Date.now() + 15 * 60 * 1000);
 
         await adminDb.collection('admin_auth_codes').doc().set({
@@ -46,17 +48,14 @@ export async function POST(request: Request) {
         const emailResult = await sendAdminOtpEmail(email, otp);
 
         if (!emailResult.success) {
-            // Error mejorado: Log detallado en el servidor para depuración
-            console.error("CRITICAL: Fallo en el envío de correo. Revisa las credenciales de Azure.", {
+            console.error("CRITICAL: Fallo en el envío de correo.", {
                 adminId: adminId,
                 email: email,
                 errorDetails: (emailResult.error as any)?.message || emailResult.error
             });
-            // Mensaje de error más específico para el cliente
-            return NextResponse.json({ message: "El servicio de correo no respondió. Verifica las credenciales del sistema e inténtalo de nuevo." }, { status: 502 });
+            return NextResponse.json({ message: "El servicio de correo no respondió. Revisa las credenciales de correo en tu .env.local" }, { status: 502 });
         }
 
-        // FIX: Devolver el email en la respuesta para que el Step 2 lo muestre
         return NextResponse.json({ 
             message: "Se ha enviado un código de acceso a tu correo.", 
             email: email 

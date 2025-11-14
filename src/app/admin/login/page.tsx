@@ -1,186 +1,187 @@
-
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { useRouter } from 'next/navigation';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { LoaderCircle, School, ArrowLeft } from 'lucide-react';
 
-// --- Componente del Logo ---
-const LogoSalle = () => (
-  <div className="flex justify-center items-center mb-4">
-    <School className="h-16 w-16 text-[#0a1c65]" />
-  </div>
-);
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import OtpInput from 'input-otp-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2 } from 'lucide-react';
 
-// --- Componente para el Paso 1: Verificación de Cuenta ---
-const AdminLoginStep1 = ({ onVerify, isLoading }: { onVerify: (account: string) => void, isLoading: boolean }) => {
-    const [account, setAccount] = useState('');
+// --- Esquemas de Validación ---
+const stepOneSchema = z.object({
+    adminId: z.string().min(1, "El ID de administrador es requerido"),
+});
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (account.trim()) onVerify(account.trim());
-    };
+const stepTwoSchema = z.object({
+    pin: z.string().min(5, "El código debe tener 5 dígitos."),
+});
+
+
+// --- Componente del Paso 1: Ingresar ID ---
+const StepOneForm = ({ onSubmit, isLoading }: { onSubmit: (data: z.infer<typeof stepOneSchema>) => void, isLoading: boolean }) => {
+    const form = useForm<z.infer<typeof stepOneSchema>>({
+        resolver: zodResolver(stepOneSchema),
+        defaultValues: { adminId: '' },
+    });
 
     return (
-        <div className="w-full max-w-md">
-            <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-[#0a1c65]">Sistema de Administración</h1>
-                <p className="text-lg text-gray-600">LaSalleGestiona</p>
-            </div>
-            <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
-                <form onSubmit={handleSubmit}>
-                    <label htmlFor="admin-account" className="text-sm font-medium text-gray-700 mb-2 block text-center">Ingrese su AdminOT Account</label>
-                    <Input id="admin-account" value={account} onChange={(e) => setAccount(e.target.value)} placeholder="AdminOT Account" className="mb-6 text-center text-lg py-6" autoComplete="off" required />
-                    <button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || !account.trim()}>
-                        {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Enviando código...' : 'Enviar código de acceso'}
-                    </button>
-                </form>
-            </div>
-        </div>
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Acceso de Administrador</CardTitle>
+                    <CardDescription>Ingresa tu ID de administrador para continuar.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <FormField
+                        control={form.control}
+                        name="adminId"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>ID de Administrador</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="ej: admin.lasalle" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Generar Código"}
+                    </Button>
+                </CardContent>
+            </form>
+        </Form>
     );
 };
 
-// --- Componente para el Paso 2: Ingreso del Código OTP ---
-const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (otp: string) => void, onBack: () => void, email: string, isLoading: boolean }) => {
-    const [otp, setOtp] = useState(new Array(6).fill(''));
-    const [timer, setTimer] = useState(15 * 60);
-    const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
-
-    useEffect(() => {
-        const interval = setInterval(() => setTimer(prev => (prev > 0 ? prev - 1 : 0)), 1000);
-        return () => clearInterval(interval);
-    }, []);
-
-    const handleChange = (index: number, value: string) => {
-        const newKey = [...otp];
-        if (!/^[0-9]?$/.test(value)) return;
-        newKey[index] = value;
-        setOtp(newKey);
-        if (value && index < 5) inputRefs.current[index + 1]?.focus();
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        const fullOtp = otp.join('');
-        if (fullOtp.length === 6) onConfirm(fullOtp);
-    };
-
-    const minutes = Math.floor(timer / 60);
-    const seconds = timer % 60;
+// --- Componente del Paso 2: Verificar OTP ---
+const StepTwoForm = ({ onSubmit, onBack, adminEmail, isLoading }: { onSubmit: (data: z.infer<typeof stepTwoSchema>) => void, onBack: () => void, adminEmail: string, isLoading: boolean }) => {
+    const form = useForm<z.infer<typeof stepTwoSchema>>({
+        resolver: zodResolver(stepTwoSchema),
+        defaultValues: { pin: '' },
+    });
 
     return (
-        <div className="w-full max-w-md">
-            <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-green-600">✅ Correo Enviado</h1>
-                <p className="text-sm text-gray-600 mt-2">Se ha enviado un código a:<br/><span className="font-mono font-bold">{email}</span></p>
-            </div>
-            <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
-                <form onSubmit={handleSubmit}>
-                    <label className="text-sm font-medium text-gray-700 mb-3 block text-center">Ingrese el código de acceso:</label>
-                    <div className="flex justify-center gap-2 md:gap-3 mb-4">
-                        {otp.map((digit, i) => (
-                            <Input
-                                key={i}
-                                ref={el => { inputRefs.current[i] = el; }}
-                                type="tel"
-                                maxLength={1}
-                                value={digit}
-                                onChange={(e) => handleChange(i, e.target.value)}
-                                className="w-12 h-14 text-center text-2xl font-mono"
-                                required
-                            />
-                        ))}
-                    </div>
-                    <div className={`text-center mb-6 font-mono text-sm ${timer > 60 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>
-                        ⏱️ Código válido por {minutes}:{seconds.toString().padStart(2, '0')}
-                    </div>
-                    <button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || otp.join('').length !== 6 || timer === 0}>
-                         {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Verificar y Entrar' : 'Verificar y Entrar'}
-                    </button>
-                </form>
-                <Button variant="link" onClick={onBack} className="mt-4 text-gray-600 flex items-center justify-center w-full">
-                    <ArrowLeft className="h-4 w-4 mr-1" /> Usar otra cuenta
-                </Button>
-            </div>
-        </div>
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <CardHeader>
+                    <CardTitle className="text-2xl">Verifica tu Identidad</CardTitle>
+                    <CardDescription>
+                        Hemos enviado un código de 5 dígitos a <span className="font-semibold text-gray-900">{adminEmail}</span>.
+                        Ingrésalo a continuación.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <FormField
+                        control={form.control}
+                        name="pin"
+                        render={({ field }) => (
+                            <FormItem className="flex flex-col items-center">
+                                <FormLabel>Código de Acceso</FormLabel>
+                                <FormControl>
+                                    <OtpInput
+                                        onComplete={(otp) => field.onChange(otp)}
+                                        numInputs={5}
+                                        containerClassName="flex gap-2 justify-center"
+                                        inputClassName="flex h-10 w-10 items-center justify-center rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-center"
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Verificar e Iniciar Sesión"}
+                    </Button>
+                </CardContent>
+            </form>
+            <Button variant="link" onClick={onBack} className="w-full text-sm">Volver e ingresar otro ID</Button>
+        </Form>
     );
 };
 
-// --- Página de Login Principal que orquesta los pasos ---
-const AdminLoginPage = () => {
-  const [step, setStep] = useState(1);
-  const [adminOTAccount, setAdminOTAccount] = useState('');
-  const [verifiedEmail, setVerifiedEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
-  const handleAccountVerification = async (account: string) => {
-    setIsLoading(true);
-    try {
-        const response = await fetch('/api/admin/auth/generate-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminId: account }),
-        });
+// --- Página Principal de Login ---
+export default function AdminLoginPage() {
+    const [step, setStep] = useState(1);
+    const [isLoading, setIsLoading] = useState(false);
+    const [adminId, setAdminId] = useState('');
+    const [adminEmail, setAdminEmail] = useState('');
+    const router = useRouter();
 
-        const data = await response.json();
+    const handleStepOneSubmit = async (data: z.infer<typeof stepOneSchema>) => {
+        setIsLoading(true);
+        try {
+            const response = await fetch('/api/admin/auth/generate-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminId: data.adminId }),
+            });
 
-        if (!response.ok) {
-            throw new Error(data.message || 'Ocurrió un error al verificar la cuenta.');
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Error al generar el código.');
+            }
+
+            toast.success('¡Código enviado!', { description: 'Revisa tu bandeja de entrada.' });
+            setAdminId(data.adminId);
+            setAdminEmail(result.email);
+            setStep(2);
+
+        } catch (error: any) {
+            toast.error('Error', { description: error.message });
+        } finally {
+            setIsLoading(false);
         }
-        
-        toast.success(data.message || '¡Revisa tu correo para obtener tu código!');
-        setAdminOTAccount(account);
-        setVerifiedEmail(data.email); // FIX: Usar el email real de la respuesta de la API
-        setStep(2);
+    };
 
-    } catch (error: any) {
-        toast.error(error.message);
-    } finally {
-        setIsLoading(false);
-    }
-  };
+    const handleStepTwoSubmit = async (data: z.infer<typeof stepTwoSchema>) => {
+        setIsLoading(true);
+        try {
+            const response = await fetch('/api/admin/auth/verify-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminId, otp: data.pin }),
+            });
 
-  const handleKeyConfirmation = async (otp: string) => {
-    setIsLoading(true);
-    try {
-        const response = await fetch('/api/admin/auth/verify-otp', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ adminId: adminOTAccount, otp }),
-        });
+            const result = await response.json();
 
-        const data = await response.json();
+            if (!response.ok) {
+                throw new Error(result.message || 'Error al verificar el código.');
+            }
 
-        if (!response.ok) {
-            throw new Error(data.message || 'Error al verificar el código.');
+            toast.success('¡Verificación exitosa!', { description: 'Bienvenido al panel de administración.' });
+            router.push(result.redirectUrl || '/admin/dashboard');
+
+        } catch (error: any) {
+            toast.error('Error de Verificación', { description: error.message });
+        } finally {
+            setIsLoading(false);
         }
+    };
 
-        toast.success(data.message || '¡Acceso concedido!');
-        router.push('/admin/dashboard');
-
-    } catch (error: any) {
-        toast.error(error.message);
-        setIsLoading(false);
-    }
-  };
-
-  const handleGoBack = () => {
-    setStep(1);
-    setAdminOTAccount('');
-    setVerifiedEmail('');
-  };
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 font-sans">
-      <div className="mb-6"><LogoSalle /></div>
-      {step === 1 && <AdminLoginStep1 onVerify={handleAccountVerification} isLoading={isLoading} />}
-      {step === 2 && <AdminLoginStep2 onConfirm={handleKeyConfirmation} onBack={handleGoBack} email={verifiedEmail} isLoading={isLoading} />}
-    </div>
-  );
-};
-
-export default AdminLoginPage;
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-100">
+            <Card className="w-full max-w-md mx-4">
+                {step === 1 ? (
+                    <StepOneForm onSubmit={handleStepOneSubmit} isLoading={isLoading} />
+                ) : (
+                    <StepTwoForm
+                        onSubmit={handleStepTwoSubmit}
+                        onBack={() => setStep(1)}
+                        adminEmail={adminEmail}
+                        isLoading={isLoading}
+                    />
+                )}
+            </Card>
+        </div>
+    );
+}

@@ -96,11 +96,12 @@ const Gastrobot = () => {
     const updatedLoanState = { material, quantity };
     setLoanState(updatedLoanState);
     addMessageToChat(`Necesito ${quantity} unidad(es).`, 'user');
-    addMessageToChat(`Perfecto. Has seleccionado ${quantity} de ${material.nombre}.\n\n¿Cuándo lo devolverás?`, 'model');
+    addMessageToChat(`Perfecto. Has seleccionado ${quantity} de ${material.nombre}.
+
+¿Cuándo lo devolverás?`, 'model');
     addMessageToChat(null, 'model', <ReturnDatePicker onConfirm={(date) => handleDateConfirmed(date, updatedLoanState)} onCancel={handleFlowCancelled} />);
   };
   
-  // ✅ --- FUNCIÓN ACTUALIZADA CON LA LÓGICA CORRECTA ---
   const handleDateConfirmed = async (date: Date, finalLoanState: LoanState) => {
       removeComponentFromChat();
       setLoanState({});
@@ -109,17 +110,15 @@ const Gastrobot = () => {
       setIsLoading(true);
   
       try {
-          // 1. Construimos el cuerpo de la petición con TODOS los datos requeridos.
           const body = {
               studentUid: session?.user.id,
               materialId: finalLoanState.material?.id,
-              materialNombre: finalLoanState.material?.nombre, // <-- DATO AÑADIDO
+              materialNombre: finalLoanState.material?.nombre,
               cantidad: finalLoanState.quantity,
               fechaDevolucion: date.toISOString(),
-              grupo: (session?.user as any)?.grupo, // <-- DATO AÑADIDO
+              grupo: (session?.user as any)?.grupo,
           };
 
-          // 2. Añadimos una validación MÁS ROBUSTA para asegurar que no falte nada.
           if (!body.studentUid || !body.materialId || !body.materialNombre || !body.cantidad || !body.fechaDevolucion) {
             throw new Error("Faltan detalles del material o de la fecha. No se pudo completar la solicitud.");
           }
@@ -128,7 +127,6 @@ const Gastrobot = () => {
             throw new Error("¡No encontré tu grupo! Asegúrate de haberlo guardado, recarga la página e inténtalo de nuevo.");
           }
 
-          // 3. Enviamos la petición a nuestra API blindada.
           const response = await fetch('/api/prestamos', { 
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -181,6 +179,7 @@ const Gastrobot = () => {
             addMessageToChat(null, 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
 
         } else if (textToSend === '📋 Ver mis préstamos activos') {
+            // --- FIX: Corregido el nombre de la función ---
             const loadingId = addMessageToChat("Consultando tus préstamos...", 'model');
             const res = await fetch(`/api/prestamos?studentUid=${session.user.id}`);
             const loans = await res.json();
