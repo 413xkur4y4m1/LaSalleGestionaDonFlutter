@@ -14,9 +14,10 @@ const extractGrupoFromEmail = (email: string | null | undefined): string | null 
 export const authOptions: NextAuthOptions = {
     providers: [
         AzureADProvider({
-            clientId: process.env.AZURE_AD_CLIENT_ID!,
-            clientSecret: process.env.AZURE_AD_CLIENT_SECRET!,
-            tenantId: process.env.AZURE_AD_TENANT_ID!,
+            // CORRECCIÓN: Usamos las variables de entorno correctas del archivo .env.local
+            clientId: process.env.CLIENT_ID!,
+            clientSecret: process.env.CLIENT_SECRET!,
+            tenantId: process.env.TENANT_ID!,
             authorization: {
                 params: {
                     scope: "openid profile user.Read email",
