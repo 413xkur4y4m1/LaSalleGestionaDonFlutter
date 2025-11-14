@@ -35,7 +35,7 @@ const AdminLoginStep1 = ({ onVerify, isLoading }: { onVerify: (account: string) 
                     <label htmlFor="admin-account" className="text-sm font-medium text-gray-700 mb-2 block text-center">Ingrese su AdminOT Account</label>
                     <Input id="admin-account" value={account} onChange={(e) => setAccount(e.target.value)} placeholder="AdminOT Account" className="mb-6 text-center text-lg py-6" autoComplete="off" required />
                     <button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || !account.trim()}>
-                        {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Verificando...' : 'Verificar cuenta'}
+                        {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Enviando código...' : 'Enviar código de acceso'}
                     </button>
                 </form>
             </div>
@@ -43,10 +43,10 @@ const AdminLoginStep1 = ({ onVerify, isLoading }: { onVerify: (account: string) 
     );
 };
 
-// --- Componente para el Paso 2: Verificación de AdminKey ---
-const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (key: string) => void, onBack: () => void, email: string, isLoading: boolean }) => {
-    const [key, setKey] = useState(new Array(6).fill(''));
-    const [timer, setTimer] = useState(30);
+// --- Componente para el Paso 2: Ingreso del Código OTP ---
+const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (otp: string) => void, onBack: () => void, email: string, isLoading: boolean }) => {
+    const [otp, setOtp] = useState(new Array(6).fill(''));
+    const [timer, setTimer] = useState(15 * 60); // 15 minutos en segundos
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
     useEffect(() => {
@@ -55,33 +55,37 @@ const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (
     }, []);
 
     const handleChange = (index: number, value: string) => {
-        const newKey = [...key];
+        const newKey = [...otp];
+        if (!/^[0-9]?$/.test(value)) return;
         newKey[index] = value;
-        setKey(newKey);
+        setOtp(newKey);
         if (value && index < 5) inputRefs.current[index + 1]?.focus();
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const fullKey = key.join('');
-        if (fullKey.length === 6) onConfirm(fullKey);
+        const fullOtp = otp.join('');
+        if (fullOtp.length === 6) onConfirm(fullOtp);
     };
+
+    const minutes = Math.floor(timer / 60);
+    const seconds = timer % 60;
 
     return (
         <div className="w-full max-w-md">
             <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-green-600">✅ Cuenta Verificada</h1>
+                <h1 className="text-2xl font-bold text-green-600">✅ Correo Enviado</h1>
                 <p className="text-sm text-gray-600 mt-2">Se ha enviado un código a:<br/><span className="font-mono font-bold">{email}</span></p>
             </div>
             <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
                 <form onSubmit={handleSubmit}>
-                    <label className="text-sm font-medium text-gray-700 mb-3 block text-center">Ingrese el AdminKey:</label>
+                    <label className="text-sm font-medium text-gray-700 mb-3 block text-center">Ingrese el código de acceso:</label>
                     <div className="flex justify-center gap-2 md:gap-3 mb-4">
-                        {key.map((digit, i) => (
+                        {otp.map((digit, i) => (
                             <Input
                                 key={i}
                                 ref={el => { inputRefs.current[i] = el; }}
-                                type="text"
+                                type="tel"
                                 maxLength={1}
                                 value={digit}
                                 onChange={(e) => handleChange(i, e.target.value)}
@@ -90,15 +94,15 @@ const AdminLoginStep2 = ({ onConfirm, onBack, email, isLoading }: { onConfirm: (
                             />
                         ))}
                     </div>
-                    <div className={`text-center mb-6 font-mono text-sm ${timer > 10 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>
-                        ⏱️ Código válido por {timer} segundos
+                    <div className={`text-center mb-6 font-mono text-sm ${timer > 60 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>
+                        ⏱️ Código válido por {minutes}:{seconds.toString().padStart(2, '0')}
                     </div>
-                    <button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || key.join('').length !== 6 || timer === 0}>
-                         {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Ingresando...' : 'Ingresar'}
+                    <button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || otp.join('').length !== 6 || timer === 0}>
+                         {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Ingresando...' : 'Verificar y Entrar'}
                     </button>
                 </form>
                 <Button variant="link" onClick={onBack} className="mt-4 text-gray-600 flex items-center justify-center w-full">
-                    <ArrowLeft className="h-4 w-4 mr-1" /> Volver
+                    <ArrowLeft className="h-4 w-4 mr-1" /> Usar otra cuenta
                 </Button>
             </div>
         </div>
@@ -115,29 +119,57 @@ const AdminLoginPage = () => {
 
   const handleAccountVerification = async (account: string) => {
     setIsLoading(true);
-    // TODO: Llamar a /api/admin/verify-account y enviar correo con el código
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    const fakeEmail = `${account.toLowerCase().replace(/\s/g, '.')}@ulsaneza.edu.mx`;
-    const maskedEmail = fakeEmail.replace(/^(...).*(@.*)$/, '***************$2');
-    toast.success('¡Cuenta verificada! Revisa tu correo para obtener tu AdminKey.');
-    setAdminOTAccount(account);
-    setVerifiedEmail(maskedEmail);
-    setStep(2);
-    setIsLoading(false);
-  };
+    try {
+        const response = await fetch('/api/admin/auth/generate-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminId: account }),
+        });
 
-  const handleKeyConfirmation = async (key: string) => {
-    setIsLoading(true);
-    // TODO: Llamar a /api/admin/verify-key y generar sesión si es correcto
-    await new Promise(resolve => setTimeout(resolve, 1500));
+        const data = await response.json();
 
-    if (key === '123456') { // Simulación de clave correcta
-        toast.success('¡Acceso concedido! Bienvenido.');
-        router.push('/admin/dashboard');
-    } else {
-        toast.error('AdminKey incorrecto. Inténtalo de nuevo.');
+        if (!response.ok) {
+            throw new Error(data.message || 'Ocurrió un error al verificar la cuenta.');
+        }
+
+        // Asumimos que la API que genera el OTP devuelve el email para mostrarlo
+        const responseEmail = account.toLowerCase() + '@ulsaneza.edu.mx'; // Placeholder, la API debería devolver el email real
+
+        toast.success(data.message || `¡Se ha enviado un código a tu correo!`);
+        setAdminOTAccount(account);
+        setVerifiedEmail(responseEmail);
+        setStep(2);
+
+    } catch (error: any) {
+        toast.error(error.message);
+    } finally {
         setIsLoading(false);
     }
+  };
+
+  const handleKeyConfirmation = async (otp: string) => {
+    setIsLoading(true);
+    try {
+        const response = await fetch('/api/admin/auth/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminId: adminOTAccount, otp }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || 'Error al verificar el código.');
+        }
+
+        toast.success(data.message || '¡Acceso concedido!');
+        router.push('/admin/dashboard'); // ¡Redirección al éxito!
+
+    } catch (error: any) {
+        toast.error(error.message);
+        setIsLoading(false); // Solo detenemos el loading en caso de error para que puedan reintentar
+    }
+    // No ponemos setIsLoading(false) en el caso de éxito porque la página va a redirigir
   };
 
   const handleGoBack = () => {
