@@ -77,7 +77,6 @@ const Gastrobot = () => {
     setMessages(prev => prev.filter(msg => msg.id !== id));
   };
   
-  // CORRECCIÓN: Función para eliminar cualquier componente activo del chat.
   const removeComponentFromChat = () => {
     setMessages(prev => prev.filter(msg => !msg.component));
   }
@@ -86,14 +85,14 @@ const Gastrobot = () => {
 
   const handleMaterialSelected = (material: Material) => {
     setShowSuggestions(false);
-    removeComponentFromChat(); // CORREGIDO
+    removeComponentFromChat();
     setLoanState({ material }); 
     addMessageToChat(`He elegido: ${material.nombre}`, 'user');
     addMessageToChat(null, 'model', <QuantitySelector material={material} onConfirm={(quantity) => handleQuantityConfirmed(quantity, material)} onCancel={handleFlowCancelled} />);
   };
 
   const handleQuantityConfirmed = (quantity: number, material: Material) => {
-    removeComponentFromChat(); // CORREGIDO
+    removeComponentFromChat();
     const updatedLoanState = { material, quantity };
     setLoanState(updatedLoanState);
     addMessageToChat(`Necesito ${quantity} unidad(es).`, 'user');
@@ -101,27 +100,35 @@ const Gastrobot = () => {
     addMessageToChat(null, 'model', <ReturnDatePicker onConfirm={(date) => handleDateConfirmed(date, updatedLoanState)} onCancel={handleFlowCancelled} />);
   };
   
+  // ✅ --- FUNCIÓN ACTUALIZADA CON LA LÓGICA CORRECTA ---
   const handleDateConfirmed = async (date: Date, finalLoanState: LoanState) => {
-      removeComponentFromChat(); // CORREGIDO
+      removeComponentFromChat();
       setLoanState({});
       addMessageToChat(`Lo devolveré el ${date.toLocaleDateString('es-MX')}.`, 'user');
       const loadingId = addMessageToChat("Un momento, estoy generando tu solicitud...", 'model');
       setIsLoading(true);
   
       try {
+          // 1. Construimos el cuerpo de la petición con TODOS los datos requeridos.
           const body = {
               studentUid: session?.user.id,
               materialId: finalLoanState.material?.id,
-              materialNombre: finalLoanState.material?.nombre,
+              materialNombre: finalLoanState.material?.nombre, // <-- DATO AÑADIDO
               cantidad: finalLoanState.quantity,
               fechaDevolucion: date.toISOString(),
-              grupo: session?.user.grupo,
+              grupo: (session?.user as any)?.grupo, // <-- DATO AÑADIDO
           };
 
-          if (!body.studentUid || !body.materialId || !body.cantidad || !body.fechaDevolucion) {
-            throw new Error("No se pudieron reunir todos los datos para el préstamo. Inténtalo de nuevo.");
+          // 2. Añadimos una validación MÁS ROBUSTA para asegurar que no falte nada.
+          if (!body.studentUid || !body.materialId || !body.materialNombre || !body.cantidad || !body.fechaDevolucion) {
+            throw new Error("Faltan detalles del material o de la fecha. No se pudo completar la solicitud.");
+          }
+          
+          if (!body.grupo) {
+            throw new Error("¡No encontré tu grupo! Asegúrate de haberlo guardado, recarga la página e inténtalo de nuevo.");
           }
 
+          // 3. Enviamos la petición a nuestra API blindada.
           const response = await fetch('/api/prestamos', { 
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -132,7 +139,7 @@ const Gastrobot = () => {
 
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.message || 'Error al contactar al servidor.');
+            throw new Error(errorData.message || 'El servidor rechazó la solicitud.');
           }
           
           const { loanCode } = await response.json(); 
@@ -141,6 +148,7 @@ const Gastrobot = () => {
           addMessageToChat("Recuerda mostrar este código en el laboratorio para recibir tu material.", 'model');
   
       } catch (error) {
+          removeMessageFromChat(loadingId);
           addMessageToChat(`Lo siento, algo salió mal: ${(error as Error).message}`, 'model');
       } finally {
           setIsLoading(false);
@@ -169,8 +177,6 @@ const Gastrobot = () => {
 
     try {
         if (textToSend === '🛒 Solicitar un préstamo') {
-            const loadingId = addMessageToChat("Cargando catálogo de materiales...", 'model');
-            removeMessageFromChat(loadingId);
             addMessageToChat("Aquí tienes nuestro catálogo. Elige el material que necesitas.", 'model');
             addMessageToChat(null, 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
 

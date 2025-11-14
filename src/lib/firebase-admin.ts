@@ -43,6 +43,8 @@ if (!admin.apps.length) {
   });
 }
 
+
+
 // Exportar servicios
 export const adminDb = admin.firestore();
 export const adminAuth = admin.auth();
