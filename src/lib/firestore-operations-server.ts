@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 const serviceAccount = {
   type: "service_account",
   project_id: "bdsql-9416f",
+  clientEmail: "firebase-adminsdk-fbsvc@bdsql-9416f.iam.gserviceaccount.com",
   private_key_id: "801f194a0f09d4eea7daf1e8f7c3b8c10f3410a7",
     privateKey: `-----BEGIN PRIVATE KEY-----
 MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC/r88klYA4rKeB
