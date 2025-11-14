@@ -1,187 +1,235 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import OtpInput from 'input-otp-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { LoaderCircle, School, ArrowLeft } from 'lucide-react';
 
 // --- Esquemas de Validación ---
 const stepOneSchema = z.object({
-    adminId: z.string().min(1, "El ID de administrador es requerido"),
+    adminId: z.string().min(1, "El AdminOT Account es requerido"),
 });
 
 const stepTwoSchema = z.object({
-    pin: z.string().min(5, "El código debe tener 5 dígitos."),
+    otp: z.string().length(6, "El código debe tener 6 dígitos."),
 });
 
+// --- Componente del Logo ---
+const LogoSalle = () => (
+  <div className="flex justify-center items-center mb-4">
+    <School className="h-16 w-16 text-[#0a1c65]" />
+  </div>
+);
 
-// --- Componente del Paso 1: Ingresar ID ---
-const StepOneForm = ({ onSubmit, isLoading }: { onSubmit: (data: z.infer<typeof stepOneSchema>) => void, isLoading: boolean }) => {
-    const form = useForm<z.infer<typeof stepOneSchema>>({
-        resolver: zodResolver(stepOneSchema),
-        defaultValues: { adminId: '' },
-    });
-
+// --- Componente para el Paso 1: Verificación de Cuenta ---
+const AdminLoginStep1 = ({ form, onSubmit, isLoading }: { form: any, onSubmit: (data: z.infer<typeof stepOneSchema>) => void, isLoading: boolean }) => {
     return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <CardHeader>
-                    <CardTitle className="text-2xl">Acceso de Administrador</CardTitle>
-                    <CardDescription>Ingresa tu ID de administrador para continuar.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <FormField
-                        control={form.control}
-                        name="adminId"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>ID de Administrador</FormLabel>
-                                <FormControl>
-                                    <Input placeholder="ej: admin.lasalle" {...field} />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Generar Código"}
-                    </Button>
-                </CardContent>
-            </form>
-        </Form>
-    );
-};
-
-// --- Componente del Paso 2: Verificar OTP ---
-const StepTwoForm = ({ onSubmit, onBack, adminEmail, isLoading }: { onSubmit: (data: z.infer<typeof stepTwoSchema>) => void, onBack: () => void, adminEmail: string, isLoading: boolean }) => {
-    const form = useForm<z.infer<typeof stepTwoSchema>>({
-        resolver: zodResolver(stepTwoSchema),
-        defaultValues: { pin: '' },
-    });
-
-    return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <CardHeader>
-                    <CardTitle className="text-2xl">Verifica tu Identidad</CardTitle>
-                    <CardDescription>
-                        Hemos enviado un código de 5 dígitos a <span className="font-semibold text-gray-900">{adminEmail}</span>.
-                        Ingrésalo a continuación.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <FormField
-                        control={form.control}
-                        name="pin"
-                        render={({ field }) => (
-                            <FormItem className="flex flex-col items-center">
-                                <FormLabel>Código de Acceso</FormLabel>
-                                <FormControl>
-                                    <OtpInput
-                                        onComplete={(otp) => field.onChange(otp)}
-                                        numInputs={5}
-                                        containerClassName="flex gap-2 justify-center"
-                                        inputClassName="flex h-10 w-10 items-center justify-center rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 text-center"
-                                    />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                        )}
-                    />
-                    <Button type="submit" className="w-full" disabled={isLoading}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Verificar e Iniciar Sesión"}
-                    </Button>
-                </CardContent>
-            </form>
-            <Button variant="link" onClick={onBack} className="w-full text-sm">Volver e ingresar otro ID</Button>
-        </Form>
-    );
-};
-
-
-// --- Página Principal de Login ---
-export default function AdminLoginPage() {
-    const [step, setStep] = useState(1);
-    const [isLoading, setIsLoading] = useState(false);
-    const [adminId, setAdminId] = useState('');
-    const [adminEmail, setAdminEmail] = useState('');
-    const router = useRouter();
-
-    const handleStepOneSubmit = async (data: z.infer<typeof stepOneSchema>) => {
-        setIsLoading(true);
-        try {
-            const response = await fetch('/api/admin/auth/generate-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ adminId: data.adminId }),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.message || 'Error al generar el código.');
-            }
-
-            toast.success('¡Código enviado!', { description: 'Revisa tu bandeja de entrada.' });
-            setAdminId(data.adminId);
-            setAdminEmail(result.email);
-            setStep(2);
-
-        } catch (error: any) {
-            toast.error('Error', { description: error.message });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const handleStepTwoSubmit = async (data: z.infer<typeof stepTwoSchema>) => {
-        setIsLoading(true);
-        try {
-            const response = await fetch('/api/admin/auth/verify-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ adminId, otp: data.pin }),
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.message || 'Error al verificar el código.');
-            }
-
-            toast.success('¡Verificación exitosa!', { description: 'Bienvenido al panel de administración.' });
-            router.push(result.redirectUrl || '/admin/dashboard');
-
-        } catch (error: any) {
-            toast.error('Error de Verificación', { description: error.message });
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
-            <Card className="w-full max-w-md mx-4">
-                {step === 1 ? (
-                    <StepOneForm onSubmit={handleStepOneSubmit} isLoading={isLoading} />
-                ) : (
-                    <StepTwoForm
-                        onSubmit={handleStepTwoSubmit}
-                        onBack={() => setStep(1)}
-                        adminEmail={adminEmail}
-                        isLoading={isLoading}
-                    />
-                )}
-            </Card>
+        <div className="w-full max-w-md">
+            <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold text-[#0a1c65]">Sistema de Administración</h1>
+                <p className="text-lg text-gray-600">LaSalleGestiona</p>
+            </div>
+            <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)}>
+                        <FormField
+                            control={form.control}
+                            name="adminId"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel htmlFor="admin-account" className="text-sm font-medium text-gray-700 mb-2 block text-center">Ingrese su AdminOT Account</FormLabel>
+                                    <FormControl>
+                                        <Input {...field} id="admin-account" placeholder="AdminOT Account" className="mb-6 text-center text-lg py-6" autoComplete="off" />
+                                    </FormControl>
+                                    <FormMessage className="text-center" />
+                                </FormItem>
+                            )}
+                        />
+                        <Button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading}>
+                            {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Enviando código...' : 'Enviar código de acceso'}
+                        </Button>
+                    </form>
+                </Form>
+            </div>
         </div>
     );
-}
+};
+
+// --- Componente para el Paso 2: Ingreso del Código OTP ---
+const AdminLoginStep2 = ({ form, onConfirm, onBack, email, isLoading }: { form: any, onConfirm: (data: z.infer<typeof stepTwoSchema>) => void, onBack: () => void, email: string, isLoading: boolean }) => {
+    const [timer, setTimer] = useState(15 * 60); // 15 minutos
+    const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+    useEffect(() => {
+        const interval = setInterval(() => setTimer(prev => (prev > 0 ? prev - 1 : 0)), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const minutes = Math.floor(timer / 60);
+    const seconds = timer % 60;
+
+    return (
+        <div className="w-full max-w-md">
+            <div className="text-center mb-6">
+                <h1 className="text-2xl font-bold text-green-600">✅ Correo Enviado</h1>
+                <p className="text-sm text-gray-600 mt-2">Se ha enviado un código a:<br/><span className="font-mono font-bold">{email}</span></p>
+            </div>
+            <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onConfirm)}>
+                        <FormField
+                            control={form.control}
+                            name="otp"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel className="text-sm font-medium text-gray-700 mb-3 block text-center">Ingrese el código de acceso:</FormLabel>
+                                    <FormControl>
+                                        <Controller
+                                            name="otp"
+                                            control={form.control}
+                                            render={({ field: { onChange, value = '' } }) => {
+                                                const otpArray = value.split('');
+
+                                                const handleChange = (index: number, val: string) => {
+                                                    if (!/^[0-9]?$/.test(val)) return;
+                                                    const newOtp = [...otpArray];
+                                                    newOtp[index] = val;
+                                                    const finalOtp = newOtp.join('').slice(0, 6);
+                                                    onChange(finalOtp);
+                                                    if (val && index < 5) inputRefs.current[index + 1]?.focus();
+                                                };
+
+                                                return (
+                                                    <div className="flex justify-center gap-2 md:gap-3 mb-4">
+                                                        {[...Array(6)].map((_, i) => (
+                                                            <Input
+                                                                key={i}
+                                                                ref={el => { inputRefs.current[i] = el; }}
+                                                                type="tel"
+                                                                maxLength={1}
+                                                                value={otpArray[i] || ''}
+                                                                onChange={(e) => handleChange(i, e.target.value)}
+                                                                className="w-12 h-14 text-center text-2xl font-mono"
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                );
+                                            }}
+                                        />
+                                    </FormControl>
+                                    <FormMessage className="text-center" />
+                                </FormItem>
+                            )}
+                         />
+                        <div className={`text-center mb-6 font-mono text-sm ${timer > 60 ? 'text-gray-500' : 'text-red-500 font-bold'}`}>
+                            ⏱️ Código válido por {minutes}:{seconds.toString().padStart(2, '0')}
+                        </div>
+                        <Button type="submit" className="w-full text-white font-bold py-3 px-4 rounded-lg bg-gradient-to-r from-[#e10022] to-[#0a1c65] hover:opacity-90 transition-opacity flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed" disabled={isLoading || timer === 0}>
+                            {isLoading && <LoaderCircle className="animate-spin mr-2 h-5 w-5" />} {isLoading ? 'Ingresando...' : 'Verificar y Entrar'}
+                        </Button>
+                    </form>
+                </Form>
+                <Button variant="link" onClick={onBack} className="mt-4 text-gray-600 flex items-center justify-center w-full">
+                    <ArrowLeft className="h-4 w-4 mr-1" /> Usar otra cuenta
+                </Button>
+            </div>
+        </div>
+    );
+};
+
+// --- Página de Login Principal que orquesta los pasos ---
+const AdminLoginPage = () => {
+  const [step, setStep] = useState(1);
+  const [adminId, setAdminId] = useState('');
+  const [verifiedEmail, setVerifiedEmail] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+
+  const formStep1 = useForm<z.infer<typeof stepOneSchema>>({
+      resolver: zodResolver(stepOneSchema),
+      defaultValues: { adminId: '' },
+  });
+
+  const formStep2 = useForm<z.infer<typeof stepTwoSchema>>({
+      resolver: zodResolver(stepTwoSchema),
+      defaultValues: { otp: '' },
+  });
+
+  const handleAccountVerification = async (data: z.infer<typeof stepOneSchema>) => {
+    setIsLoading(true);
+    try {
+        const response = await fetch('/api/admin/auth/generate-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminId: data.adminId }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.message || 'Ocurrió un error al verificar la cuenta.');
+        }
+
+        toast.success(result.message || `¡Se ha enviado un código a tu correo!`);
+        setAdminId(data.adminId);
+        setVerifiedEmail(result.email); // Usamos el email real de la API
+        setStep(2);
+
+    } catch (error: any) {
+        toast.error(error.message);
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
+  const handleKeyConfirmation = async (data: z.infer<typeof stepTwoSchema>) => {
+    setIsLoading(true);
+    try {
+        const response = await fetch('/api/admin/auth/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminId: adminId, otp: data.otp }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.message || 'Error al verificar el código.');
+        }
+
+        toast.success(result.message || '¡Acceso concedido!');
+        router.push(result.redirectUrl || '/admin/dashboard');
+
+    } catch (error: any) {
+        toast.error(error.message);
+    } finally {
+        // En caso de error, el botón se reactiva. En caso de éxito, la página redirige.
+        setIsLoading(false);
+    }
+  };
+
+  const handleGoBack = () => {
+    setStep(1);
+    setAdminId('');
+    setVerifiedEmail('');
+    formStep1.reset();
+    formStep2.reset();
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 font-sans">
+      <div className="mb-6"><LogoSalle /></div>
+      {step === 1 && <AdminLoginStep1 form={formStep1} onSubmit={handleAccountVerification} isLoading={isLoading} />}
+      {step === 2 && <AdminLoginStep2 form={formStep2} onConfirm={handleKeyConfirmation} onBack={handleGoBack} email={verifiedEmail} isLoading={isLoading} />}
+    </div>
+  );
+};
+
+export default AdminLoginPage;

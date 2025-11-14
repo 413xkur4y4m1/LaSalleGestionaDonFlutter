@@ -1,10 +1,10 @@
-
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 
 /**
- * Verifies a one-time password (OTP) for admin login.
+ * Verifica un código OTP y, si es válido, lo marca como usado.
+ * Esta versión simplifica la consulta a Firestore para evitar requerir un índice compuesto.
  */
 export async function POST(request: Request) {
     console.log("API /api/admin/auth/verify-otp HIT!");
@@ -17,38 +17,45 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "El ID de administrador y el código OTP son requeridos." }, { status: 400 });
         }
 
-        // 1. Buscar el código OTP en Firestore
-        const now = Timestamp.now();
+        // 1. Consulta simplificada: busca solo por adminId y otp.
+        // Esto evita el error FAILED_PRECONDITION que requiere un índice compuesto.
         const otpQuery = adminDb.collection('admin_auth_codes')
             .where('adminId', '==', adminId)
             .where('otp', '==', otp)
-            .where('expiresAt', '>', now)
-            .where('used', '==', false)
             .limit(1);
         
         const otpSnapshot = await otpQuery.get();
 
         if (otpSnapshot.empty) {
-            console.log(`Verification failed for admin '${adminId}'. OTP '${otp}' is invalid, expired, or already used.`);
-            return NextResponse.json({ message: "Código incorrecto, expirado o ya utilizado." }, { status: 401 }); // 401 Unauthorized
+            console.log(`Verification failed for admin '${adminId}'. OTP '${otp}' not found.`);
+            return NextResponse.json({ message: "Código incorrecto." }, { status: 401 });
         }
 
-        // 2. Marcar el código como usado en una transacción para asegurar atomicidad
         const otpDoc = otpSnapshot.docs[0];
+        const otpData = otpDoc.data();
+        const now = Timestamp.now();
+
+        // 2. Verificación de las condiciones en el código de la API, no en la consulta.
+        if (otpData.used) {
+            console.log(`Verification failed for admin '${adminId}'. OTP '${otp}' was already used.`);
+            return NextResponse.json({ message: "Este código ya fue utilizado." }, { status: 401 });
+        }
+
+        if (now.toMillis() > otpData.expiresAt.toMillis()) {
+            console.log(`Verification failed for admin '${adminId}'. OTP '${otp}' has expired.`);
+            return NextResponse.json({ message: "El código ha expirado." }, { status: 401 });
+        }
+
+        // 3. Si todas las condiciones pasan, marcamos el código como usado.
         await otpDoc.ref.update({ used: true });
         
         console.log(`Verification successful for admin '${adminId}'. OTP document ${otpDoc.id} has been marked as used.`);
 
-        // 3. Generar sesión (simulado por ahora)
-        // En una aplicación real, aquí se crearía un JWT o una cookie de sesión.
-        // El cliente simplemente confía en esta respuesta para redirigir.
-
+        // 4. Simulación de creación de sesión.
+        // En una app real, aquí se crearía un JWT o una cookie.
         return NextResponse.json({ 
             message: "¡Acceso concedido! Bienvenido.",
-            // Podríamos devolver información del admin si fuera necesario en el frontend
-            admin: {
-                id: adminId,
-            }
+            redirectUrl: '/admin/dashboard' // URL a la que redirigir en el frontend
         });
 
     } catch (error) {
