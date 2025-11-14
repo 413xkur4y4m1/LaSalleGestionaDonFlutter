@@ -1,18 +1,25 @@
-
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 
 // --- CONFIGURACIÓN CENTRAL DE OAUTH2 --- 
 
-/**
- * Crea un Nodemailer transporter configurado con Microsoft OAuth2.
- * Esta es la forma moderna y segura de autenticarse.
- */
 const createTransporter = async () => {
+    console.log("\n--- [DIAGNÓSTICO DE CORREO] --- Iniciando verificación de credenciales...");
+    console.log(`[DIAGNÓSTICO DE CORREO] CLIENT_ID: ${process.env.CLIENT_ID ? `Cargado (longitud: ${process.env.CLIENT_ID.length})` : '¡NO ENCONTRADO! 🔴'}`);
+    console.log(`[DIAGNÓSTICO DE CORREO] CLIENT_SECRET: ${process.env.CLIENT_SECRET ? `Cargado (longitud: ${process.env.CLIENT_SECRET.length})` : '¡NO ENCONTRADO! 🔴'}`);
+    console.log(`[DIAGNÓSTICO DE CORREO] REFRESH_TOKEN: ${process.env.REFRESH_TOKEN ? `Cargado (longitud: ${process.env.REFRESH_TOKEN.length})` : '¡NO ENCONTRADO! 🔴'}`);
+    console.log(`[DIAGNÓSTICO DE CORREO] EMAIL_USER: ${process.env.EMAIL_USER ? `Cargado (${process.env.EMAIL_USER})` : '¡NO ENCONTRADO! 🔴'}`);
+    console.log("--- [DIAGNÓSTICO DE CORREO] --- Verificación completada ---\n");
+
+    if (!process.env.CLIENT_ID || !process.env.CLIENT_SECRET || !process.env.REFRESH_TOKEN || !process.env.EMAIL_USER) {
+        throw new Error("FATAL: Una o más variables de entorno de correo no están definidas en .env.local. Revisa los logs del servidor.");
+    }
+
+    // 🔥 REDIRECT URI CORRECTO (NECESARIO PARA MICROSOFT)
     const oauth2Client = new google.auth.OAuth2(
         process.env.CLIENT_ID,
         process.env.CLIENT_SECRET,
-        "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+        "https://developers.google.com/oauthplayground" // ← ESTE ES EL CORRECTO
     );
 
     oauth2Client.setCredentials({
@@ -20,26 +27,34 @@ const createTransporter = async () => {
     });
 
     try {
-        const { token } = await oauth2Client.getAccessToken();
-        if (!token) throw new Error("Falló la creación del token de acceso de OAuth2.");
+        console.log("[INFO] Intentando obtener token de acceso desde Microsoft OAuth2...");
+        const accessTokenResponse = await oauth2Client.getAccessToken();
+
+        if (!accessTokenResponse?.token) {
+            throw new Error("La obtención del access_token devolvió vacío. El refresh_token puede haber expirado.");
+        }
+
+        const accessToken = accessTokenResponse.token;
+        console.log("[SUCCESS] ¡AccessToken obtenido correctamente! ✅");
 
         return nodemailer.createTransport({
             host: "smtp.office365.com",
             port: 587,
             secure: false,
             auth: {
-                type: 'OAuth2',
+                type: "OAuth2",
                 user: process.env.EMAIL_USER,
                 clientId: process.env.CLIENT_ID,
                 clientSecret: process.env.CLIENT_SECRET,
                 refreshToken: process.env.REFRESH_TOKEN,
-                accessToken: token,
+                accessToken: accessToken,
             },
             tls: { ciphers: 'SSLv3' },
         });
+
     } catch (error) {
-        console.error("Error crítico al crear el transportador de correo OAuth2:", error);
-        throw new Error("No se pudo configurar el servicio de correo.");
+        console.error("🔴 CRÍTICO: Error al obtener el accessToken desde Microsoft.", error);
+        throw new Error("No se pudo autenticar con el servicio de correo de Microsoft.");
     }
 };
 
@@ -78,15 +93,15 @@ export const sendAdminOtpEmail = async (adminEmail: string, otp: string) => {
       subject: `Tu código de acceso: ${otp}`,
       html: createOtpHtmlBody(otp),
     });
-    console.log("Correo de OTP enviado a: %s", adminEmail);
+    console.log("[SUCCESS] Correo OTP enviado a:", adminEmail);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error("Falló el envío del correo de OTP:", error);
+    console.error("🔴 Falló sendAdminOtpEmail:", error);
     return { success: false, error };
   }
 };
 
-// --- FUNCIONALIDAD 2: EMAIL DE PRÉSTAMO VENCIDO (RESTAURADA Y MEJORADA) ---
+// --- FUNCIONALIDAD 2: EMAIL DE PRÉSTAMO VENCIDO ---
 
 interface OverdueLoanEmailDetails {
     studentName: string;
@@ -108,13 +123,13 @@ const createOverdueLoanHtmlBody = ({ studentName, materialName, loanDate, return
                 <p>Hola ${studentName},</p>
                 <p>Te informamos que se ha generado un adeudo debido a que el siguiente material no fue devuelto a tiempo:</p>
                 <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-                    <p style="margin: 0;"><strong>Material:</strong> ${materialName}</p>
-                    <p style="margin: 0;"><strong>Fecha de Préstamo:</strong> ${loanDate.toLocaleDateString('es-MX')}</p>
-                    <p style="margin: 0;"><strong>Fecha de Devolución Esperada:</strong> <span style="color: #d9534f; font-weight: bold;">${returnDate.toLocaleDateString('es-MX')}</span></p>
+                    <p><strong>Material:</strong> ${materialName}</p>
+                    <p><strong>Fecha de Préstamo:</strong> ${loanDate.toLocaleDateString('es-MX')}</p>
+                    <p><strong>Fecha de Devolución Esperada:</strong> <span style="color: #d9534f; font-weight: bold;">${returnDate.toLocaleDateString('es-MX')}</span></p>
                 </div>
                 <p>Puedes ver los detalles de este adeudo y proceder con el pago en el portal de estudiantes.</p>
                 <div style="text-align: center; margin-top: 30px;">
-                    <a href="${baseUrl}/dashboard/adeudos" style="background-color: #005A9C; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-size: 16px;">Ir a Mis Adeudos</a>
+                    <a href="${baseUrl}/dashboard/adeudos" style="background-color: #005A9C; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px;">Ir a Mis Adeudos</a>
                 </div>
             </div>
             <div style="text-align: center; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #888;">
@@ -135,11 +150,10 @@ export const sendOverdueLoanEmail = async (details: OverdueLoanEmailDetails) => 
       subject: "Notificación de Préstamo Vencido",
       html: createOverdueLoanHtmlBody(details),
     });
-    console.log("Correo de adeudo enviado a: %s", details.studentEmail);
+    console.log("[SUCCESS] Correo de adeudo enviado a:", details.studentEmail);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error("Falló el envío del correo de adeudo:", error);
+    console.error("🔴 Falló sendOverdueLoanEmail:", error);
     return { success: false, error };
   }
 };
-
