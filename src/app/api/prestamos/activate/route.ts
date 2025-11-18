@@ -5,17 +5,27 @@ import { getAuth } from 'firebase-admin/auth';
 import { cookies } from 'next/headers';
 import { Timestamp } from 'firebase-admin/firestore';
 
-// Función para verificar la sesión del admin desde el lado del servidor
+// --- FIX: Función de verificación de admin actualizada ---
+// Ahora consulta Firestore para validar si el UID del usuario está en la colección 'admins'
 async function verifyAdminSession(sessionCookie: string) {
     try {
+        // 1. Verificar la cookie de sesión para obtener los datos del usuario
         const decodedClaims = await getAuth().verifySessionCookie(sessionCookie, true);
         
-        // Verificamos si el usuario tiene el claim de admin
-        if (decodedClaims.role !== 'admin') {
-            return null;
+        // 2. Consultar si el UID del usuario existe como documento en la colección 'admins'
+        const adminDocRef = adminDb.collection('admins').doc(decodedClaims.uid);
+        const adminDoc = await adminDocRef.get();
+
+        // 3. Si el documento existe, es un admin válido.
+        if (adminDoc.exists) {
+            return decodedClaims; // Devuelve los datos del usuario admin
         }
-        return decodedClaims;
+
+        // Si no existe, no es un admin.
+        return null;
     } catch (error) {
+        // La cookie es inválida o ha expirado
+        console.error("Error verificando la sesión de admin:", error);
         return null;
     }
 }
@@ -23,8 +33,7 @@ async function verifyAdminSession(sessionCookie: string) {
 export async function POST(request: Request) {
     console.log("API /api/prestamos/activate HIT!");
 
-    // 1. --- Verificación de Sesión de Administrador ---
-    const cookieStore = await cookies(); // <-- FIX: Añadido await
+    const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
 
     if (!sessionCookie) {
@@ -45,7 +54,6 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "El código del préstamo es requerido." }, { status: 400 });
         }
 
-        // 2. --- Búsqueda del Préstamo en Firestore ---
         const prestamosRef = adminDb.collection('prestamos');
         const q = prestamosRef.where('loanCode', '==', codigo).limit(1);
         
@@ -58,16 +66,14 @@ export async function POST(request: Request) {
         const prestamoDoc = querySnapshot.docs[0];
         const prestamoData = prestamoDoc.data();
 
-        // 3. --- Validación del Estado del Préstamo ---
         if (prestamoData.estado !== 'pendiente') {
             const estadoActual = prestamoData.estado.charAt(0).toUpperCase() + prestamoData.estado.slice(1);
-            return NextResponse.json({ message: `Este préstamo ya fue activado o procesado. Estado actual: ${estadoActual}.` }, { status: 409 }); // 409 Conflict
+            return NextResponse.json({ message: `Este préstamo ya fue activado o procesado. Estado actual: ${estadoActual}.` }, { status: 409 });
         }
 
-        // 4. --- Activación y Actualización del Documento ---
         await prestamoDoc.ref.update({
             estado: 'activo',
-            activatedBy: adminClaims.uid, // Guardamos el UID del admin que lo activó
+            activatedBy: adminClaims.uid,
             activatedAt: Timestamp.now()
         });
         

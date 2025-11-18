@@ -4,15 +4,27 @@ import { adminDb } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
 import { cookies } from 'next/headers';
 
-// Función para verificar la sesión del admin desde el lado del servidor
+// --- FIX: Función de verificación de admin actualizada ---
+// Ahora consulta Firestore para validar si el UID del usuario está en la colección 'admins'
 async function verifyAdminSession(sessionCookie: string) {
     try {
+        // 1. Verificar la cookie de sesión para obtener los datos del usuario
         const decodedClaims = await getAuth().verifySessionCookie(sessionCookie, true);
-        if (decodedClaims.role !== 'admin') {
-            return null;
+        
+        // 2. Consultar si el UID del usuario existe como documento en la colección 'admins'
+        const adminDocRef = adminDb.collection('admins').doc(decodedClaims.uid);
+        const adminDoc = await adminDocRef.get();
+
+        // 3. Si el documento existe, es un admin válido.
+        if (adminDoc.exists) {
+            return decodedClaims; // Devuelve los datos del usuario admin
         }
-        return decodedClaims;
+
+        // Si no existe, no es un admin.
+        return null;
     } catch (error) {
+        // La cookie es inválida o ha expirado
+        console.error("Error verificando la sesión de admin:", error);
         return null;
     }
 }
@@ -20,8 +32,7 @@ async function verifyAdminSession(sessionCookie: string) {
 export async function GET(request: Request) {
     console.log("API /api/prestamos/details HIT!");
 
-    // 1. --- Verificación de Sesión de Administrador ---
-    const cookieStore = await cookies(); // <-- FIX: Añadido await
+    const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
 
     if (!sessionCookie) {
@@ -42,7 +53,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ message: "El código del préstamo es requerido como parámetro." }, { status: 400 });
         }
 
-        // 2. --- Búsqueda del Préstamo en Firestore ---
         const prestamosRef = adminDb.collection('prestamos');
         const q = prestamosRef.where('loanCode', '==', codigo).limit(1);
         
@@ -55,16 +65,14 @@ export async function GET(request: Request) {
         const prestamoDoc = querySnapshot.docs[0];
         const prestamoData = prestamoDoc.data();
 
-        // 3. --- Devolver los datos del préstamo ---
-        // Devolvemos los datos relevantes para que el admin confirme
         return NextResponse.json({
             id: prestamoDoc.id,
             loanCode: prestamoData.loanCode,
-            studentName: prestamoData.studentName, // Asumiendo que guardas el nombre
+            studentName: prestamoData.studentName,
             materialNombre: prestamoData.materialNombre,
             cantidad: prestamoData.cantidad,
             estado: prestamoData.estado,
-            fechaSolicitud: prestamoData.createdAt.toDate(), // Convertir Timestamp a Date
+            fechaSolicitud: prestamoData.createdAt.toDate(),
         });
 
     } catch (error) {
@@ -72,4 +80,3 @@ export async function GET(request: Request) {
         return NextResponse.json({ message: "Error interno del servidor al obtener los detalles del préstamo." }, { status: 500 });
     }
 }
-

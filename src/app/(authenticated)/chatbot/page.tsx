@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 import IconoGastrobot from '@/components/atoms/IconoGastrobot';
@@ -13,8 +13,9 @@ import DebtListView from '@/components/organisms/DebtListView';
 import { Material } from '@/components/molecules/MaterialCard';
 import QuantitySelector from '@/components/molecules/QuantitySelector';
 import ReturnDatePicker from '@/components/molecules/ReturnDatePicker';
+import { Button } from '@/components/ui/button';
 
-// --- TIPOS Y ESTRUCTURAS DE DATOS ---
+// --- Tipos ---
 interface ChatMessage {
   id: number;
   role: 'user' | 'model';
@@ -28,24 +29,69 @@ interface LoanState {
   returnDate?: Date;
 }
 
-// --- COMPONENTES INTERNOS ---
-const SuggestionButton: React.FC<{ text: string; icon: React.ReactNode; onClick: (text: string) => void; }> = ({ text, icon, onClick }) => (
-  <button
-    onClick={() => onClick(text)}
-    className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors duration-200 shadow-sm"
-  >
-    {icon}
-    {text}
-  </button>
-);
+// --- Componente de QR Inteligente con Descarga ---
+interface QRCodeDisplayProps {
+    loanCode: string;
+    materialNombre: string;
+    cantidad: number;
+}
 
-const QRCodeDisplay: React.FC<{ loanCode: string }> = ({ loanCode }) => (
-    <div className="bg-white p-4 rounded-lg flex flex-col items-center gap-2 border border-gray-200 shadow-md">
-        <QRCodeSVG value={loanCode} size={128} />
-        <p className="font-mono text-lg font-bold text-gray-800 mt-2">{loanCode}</p>
-        <p className="text-xs text-center text-gray-600">Muestra este código al administrador del laboratorio.</p>
-    </div>
-);
+const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre, cantidad }) => {
+    const [qrUrl, setQrUrl] = useState('');
+    const qrRef = useRef<SVGSVGElement>(null);
+
+    useEffect(() => {
+        const fullUrl = `${window.location.origin}/admin/scan?codigo=${loanCode}`;
+        setQrUrl(fullUrl);
+    }, [loanCode]);
+
+    const handleDownload = () => {
+        if (!qrRef.current) return;
+
+        const svgElement = qrRef.current;
+        const svgData = new XMLSerializer().serializeToString(svgElement);
+
+        const canvas = document.createElement("canvas");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const svgSize = svgElement.getBoundingClientRect();
+        canvas.width = svgSize.width;
+        canvas.height = svgSize.height;
+
+        const img = new Image();
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0);
+            const pngUrl = canvas.toDataURL("image/png");
+
+            const link = document.createElement("a");
+            const fileName = `${materialNombre.replace(/ /g, '_')}-${cantidad}.png`; // Ej: Tornillos_de_estrella-15.png
+            link.download = fileName;
+            link.href = pngUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+        img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+    };
+
+    if (!qrUrl) {
+        return <div className="flex justify-center items-center p-8"><LoaderCircle className="animate-spin h-8 w-8 text-gray-400" /></div>;
+    }
+
+    return (
+        <div className="bg-white p-4 rounded-lg flex flex-col items-center gap-3 border border-gray-200 shadow-md">
+            <QRCodeSVG value={qrUrl} size={192} ref={qrRef} />
+            <p className="font-mono text-xl font-bold text-gray-800">{loanCode}</p>
+            <p className="text-sm text-center text-gray-600">Muestra este código al administrador.</p>
+            <Button onClick={handleDownload} variant="outline" className="w-full">
+                <Download className="mr-2 h-4 w-4" />
+                Descargar QR
+            </Button>
+        </div>
+    );
+};
+
 
 // --- COMPONENTE PRINCIPAL: GASTROBOT ---
 const Gastrobot = () => {
@@ -110,6 +156,7 @@ const Gastrobot = () => {
       try {
           const body = {
               studentUid: session?.user.id,
+              studentName: session?.user.name,
               materialId: finalLoanState.material?.id,
               materialNombre: finalLoanState.material?.nombre,
               cantidad: finalLoanState.quantity,
@@ -140,7 +187,9 @@ const Gastrobot = () => {
           
           const { loanCode } = await response.json(); 
           addMessageToChat("¡Listo! Tu solicitud ha sido generada con éxito.", 'model');
-          addMessageToChat(null, 'model', <QRCodeDisplay loanCode={loanCode} />);
+          
+          // --- FIX: Pasa los datos necesarios al componente de QR ---
+          addMessageToChat(null, 'model', <QRCodeDisplay loanCode={loanCode} materialNombre={body.materialNombre} cantidad={body.cantidad} />);
           addMessageToChat("Recuerda mostrar este código en el laboratorio para recibir tu material.", 'model');
   
       } catch (error) {
@@ -177,7 +226,6 @@ const Gastrobot = () => {
             addMessageToChat(null, 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
 
         } else if (textToSend === '📋 Ver mis préstamos activos') {
-            // --- FIX: Corregido el nombre de la función ---
             const loadingId = addMessageToChat("Consultando tus préstamos...", 'model');
             const res = await fetch(`/api/prestamos?studentUid=${session.user.id}`);
             const loans = await res.json();
@@ -217,7 +265,6 @@ const Gastrobot = () => {
     }
   };
 
-  // --- RENDERIZADO DEL COMPONENTE ---
   return (
     <div className="bg-white shadow-xl rounded-lg w-full h-full flex flex-col border border-gray-200">
         <div className="p-3 bg-white rounded-t-lg flex items-center border-b border-gray-200">
@@ -259,5 +306,12 @@ const Gastrobot = () => {
     </div>
   );
 };
+
+const SuggestionButton: React.FC<{ text: string; icon: React.ReactNode; onClick: (text: string) => void }> = ({ text, icon, onClick }) => (
+    <button onClick={() => onClick(text)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 px-3 rounded-full flex items-center gap-2 transition-colors duration-150 shadow-sm border border-gray-200">
+        {icon}
+        {text}
+    </button>
+);
 
 export default Gastrobot;
