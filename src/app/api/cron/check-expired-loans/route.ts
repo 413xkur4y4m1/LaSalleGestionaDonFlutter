@@ -1,14 +1,13 @@
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server'; // <-- FIX: Importar NextRequest
 import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
-import { headers } from 'next/headers';
 
-export async function GET() {
-  // 1. --- ¡SEGURIDAD PRIMERO! ---
-  // Verificamos que la petición venga de nuestro servicio de CRON y no de un usuario cualquiera.
-  const headersList = headers();
-  const authHeader = headersList.get('authorization');
+// FIX: La función ahora acepta el objeto `request`
+export async function GET(request: NextRequest) {
+  // 1. --- ¡SEGURIDAD PRIMERO! (FORMA CORREGIDA) ---
+  // Se obtienen las cabeceras directamente del objeto `request`
+  const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
   if (!cronSecret) {

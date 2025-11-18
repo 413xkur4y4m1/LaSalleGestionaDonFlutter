@@ -1,10 +1,11 @@
 
-import { NextRequest, NextResponse } from 'next/server'; // <-- FIX: Usar NextRequest
+import { NextRequest, NextResponse } from 'next/server'; // <-- FIX: Importar NextRequest
 import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
 
-export async function GET(request: NextRequest) { // <-- FIX: Usar NextRequest
-  // 1. --- ¡SEGURIDAD PRIMERO! ---
+// FIX: La función ahora acepta el objeto `request`
+export async function GET(request: NextRequest) { 
+  // 1. --- ¡SEGURIDAD PRIMERO! (FORMA CORREGIDA) ---
   const authHeader = request.headers.get('authorization'); // <-- FIX: Leer headers desde request
   const cronSecret = process.env.CRON_SECRET;
 
