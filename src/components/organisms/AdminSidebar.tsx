@@ -5,11 +5,13 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, Users, CreditCard, Box, CheckCircle, BarChart, QrCode, ShieldAlert, UserPlus, Puzzle, LogOut
+  LayoutDashboard, Users, CreditCard, Box, CheckCircle, BarChart, QrCode, ShieldAlert, UserPlus, Puzzle, LogOut, ScanLine
 } from 'lucide-react';
 
+// Se agrega el nuevo ítem de menú para escanear
 const menuItems = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/admin/scan', icon: ScanLine, label: 'Escanear Préstamo' }, // <-- ¡NUEVO!
   { href: '/admin/grupos', icon: Users, label: 'Grupos' },
   { href: '/admin/adeudos', icon: CreditCard, label: 'Adeudos' },
   { href: '/admin/prestamos', icon: Box, label: 'Préstamos' },
@@ -32,9 +34,8 @@ const AdminSidebar = () => {
         <nav className="flex-grow p-4 space-y-2">
             {menuItems.map((item) => {
                 const isActive = pathname && (
-                    item.href === '/admin/dashboard'
-                        ? pathname === item.href
-                        : pathname.startsWith(item.href)
+                    // Condición especial para que /admin/scan se marque como activo solo en esa página
+                    item.href === pathname
                 );
 
                 return (
@@ -53,7 +54,7 @@ const AdminSidebar = () => {
             })}
         </nav>
         <div className="p-4 border-t">
-            <a href="#" className="flex items-center gap-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+            <a href="/api/auth/signout" className="flex items-center gap-3 p-3 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
                 <LogOut className="h-5 w-5" />
                 <span className="font-medium">Cerrar sesión</span>
             </a>
