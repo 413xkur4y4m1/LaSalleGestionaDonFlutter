@@ -1,35 +1,17 @@
 
-"use client";
-
-import React from 'react';
-import { usePathname } from 'next/navigation';
-import AdminTopNavbar from '@/components/organisms/AdminTopNavbar';
-import AdminSidebar from '@/components/organisms/AdminSidebar';
+import AdminMenu from "@/components/organisms/AdminMenu";
+import AdminTopNavbar from "@/components/organisms/AdminTopNavbar";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isAuthPage = pathname === '/admin/login';
-
-  // Si es una página de autenticación, renderiza solo a los hijos en un contenedor simple.
-  // La página de login es responsable de su propio layout centrado.
-  if (isAuthPage) {
     return (
-      <div className="min-h-screen bg-gray-100 font-sans">
-        {children}
-      </div>
+        <div className="h-screen w-full flex bg-gray-50">
+            <AdminMenu />
+            <div className="flex-1 flex flex-col">
+                <AdminTopNavbar />
+                <main className="flex-1 p-4 md:p-8 overflow-y-auto">
+                    {children}
+                </main>
+            </div>
+        </div>
     );
-  }
-
-  // Para todas las demás páginas del admin, muestra el dashboard completo.
-  return (
-    <div className="min-h-screen bg-gray-100 font-sans">
-      <AdminSidebar />
-      <div className="ml-64"> {/* Este margen debe coincidir con el ancho del Sidebar */}
-        <AdminTopNavbar />
-        <main className="p-8">
-          {children}
-        </main>
-      </div>
-    </div>
-  );
 }

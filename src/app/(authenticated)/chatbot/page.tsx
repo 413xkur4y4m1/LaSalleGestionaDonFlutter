@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -65,7 +64,7 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
             const pngUrl = canvas.toDataURL("image/png");
 
             const link = document.createElement("a");
-            const fileName = `${materialNombre.replace(/ /g, '_')}-${cantidad}.png`; // Ej: Tornillos_de_estrella-15.png
+            const fileName = `${materialNombre.replace(/ /g, '_')}-${cantidad}.png`;
             link.download = fileName;
             link.href = pngUrl;
             document.body.appendChild(link);
@@ -178,22 +177,28 @@ const Gastrobot = () => {
               body: JSON.stringify(body),
           });
 
+          // Lee la respuesta JSON una sola vez
+          const data = await response.json();
+
           removeMessageFromChat(loadingId);
 
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'El servidor rechazó la solicitud.');
+            throw new Error(data.message || 'El servidor rechazó la solicitud.');
           }
           
-          const { loanCode } = await response.json(); 
-          addMessageToChat("¡Listo! Tu solicitud ha sido generada con éxito.", 'model');
+          const { loanCode } = data; 
           
-          // --- FIX: Pasa los datos necesarios al componente de QR ---
+          if (!loanCode) {
+            throw new Error('No se recibió el código del préstamo del servidor.');
+          }
+          
+          addMessageToChat("¡Listo! Tu solicitud ha sido generada con éxito.", 'model');
           addMessageToChat(null, 'model', <QRCodeDisplay loanCode={loanCode} materialNombre={body.materialNombre} cantidad={body.cantidad} />);
           addMessageToChat("Recuerda mostrar este código en el laboratorio para recibir tu material.", 'model');
   
       } catch (error) {
           removeMessageFromChat(loadingId);
+          console.error('Error al generar préstamo:', error);
           addMessageToChat(`Lo siento, algo salió mal: ${(error as Error).message}`, 'model');
       } finally {
           setIsLoading(false);

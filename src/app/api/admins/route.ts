@@ -1,4 +1,3 @@
-
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase-admin';
 import { getAuth } from 'firebase-admin/auth';
@@ -63,18 +62,20 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: `El usuario "${email}" ya es un administrador.` }, { status: 409 }); // 409 Conflict
         }
 
-        // 4. --- Crear el documento de admin en Firestore ---
+        // 4. --- Crear el documento de admin en Firestore con la estructura correcta ---
         await newAdminDocRef.set({
-            email: userRecord.email,
-            displayName: userRecord.displayName || 'Sin nombre',
-            addedBy: adminClaims.uid, // UID del admin que lo agregó
-            addedByEmail: adminClaims.email,
-            createdAt: Timestamp.now()
+            correo: userRecord.email,
+            fechaCreacion: Timestamp.now(),
+            rol: 'admin',
+            fotoPerfil: userRecord.photoURL || '' // Foto del perfil de Firebase Auth, o vacío
         });
 
         console.log(`Usuario ${email} (UID: ${targetUid}) fue promovido a admin por ${adminClaims.email}`);
 
-        return NextResponse.json({ message: `¡Usuario ${email} ha sido promovido a administrador con éxito!` });
+        return NextResponse.json({ 
+            message: `¡Usuario ${email} ha sido promovido a administrador con éxito!`,
+            adminUid: targetUid
+        });
 
     } catch (error: any) {
         console.error("Error fatal en /api/admins:", error);
