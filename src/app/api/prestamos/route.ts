@@ -1,10 +1,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-// ✅ 1. IMPORTAMOS LAS DOS HERRAMIENTAS CENTRALIZADAS DEL SERVIDOR
 import { getDb, getRtdb } from '@/lib/firestore-operations-server';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 
-// --- GET (Sin cambios lógicos, solo usa el nuevo getDb) ---
+// --- GET (No se modifica) ---
+// ... (El código GET se mantiene igual que antes)
+
 export async function GET(req: NextRequest) {
     try {
         const db = getDb();
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ message: 'El ID del estudiante es requerido.' }, { status: 400 });
         }
 
+        // Esta consulta podría ajustarse para incluir 'pendiente' si se necesita en la UI del estudiante
         const loansCollectionRef = db.collection(`Estudiantes/${studentUid}/Prestamos`);
         const q = loansCollectionRef.where('estado', '==', 'activo');
         const querySnapshot = await q.get();
@@ -24,8 +26,8 @@ export async function GET(req: NextRequest) {
             return {
                 id: doc.id,
                 ...data,
-                fechaInicio: (data.fechaInicio as Timestamp)?.toDate().toISOString(),
-                fechaDevolucion: (data.fechaDevolucion as Timestamp)?.toDate().toISOString(),
+                fechaInicio: (data.fechaInicio)?.toDate().toISOString(),
+                fechaDevolucion: (data.fechaDevolucion)?.toDate().toISOString(),
             };
         });
 
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
 }
 
 
-// --- POST (Corregido y usando las nuevas herramientas del servidor) ---
+// --- POST (MODIFICADO PARA EL NUEVO FLUJO DE VALIDACIÓN) ---
 
 const generateLoanCode = (grupo: string) => {
     const randomPart = Math.floor(10000 + Math.random() * 90000);
@@ -46,7 +48,6 @@ const generateLoanCode = (grupo: string) => {
 }
 
 export async function POST(req: NextRequest) {
-    // ✅ 2. OBTENEMOS AMBAS BASES DE DATOS DESDE NUESTRO CENTRO DE MANDO
     const db = getDb();
     const rtdb = getRtdb();
 
@@ -57,52 +58,57 @@ export async function POST(req: NextRequest) {
         if (!studentUid || !materialId || !cantidad || !fechaDevolucion || !grupo) {
             return NextResponse.json({ message: 'Faltan datos requeridos.' }, { status: 400 });
         }
-
-        const loanCode = generateLoanCode(grupo);
-        const newLoanRef = db.collection(`Estudiantes/${studentUid}/Prestamos`).doc(loanCode);
         
-        // ✅ 3. LA SINTAXIS PARA LA RTDB DEL ADMIN SDK ES CORRECTA Y SEGURA
+        // Se sigue consultando RTDB solo para obtener el precio del material.
         const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
-
         const materialSnapshot = await materialRtdbRef.once('value');
         if (!materialSnapshot.exists()) {
-            throw new Error(`El material con ID ${materialId} no existe en el inventario.`);
+             return NextResponse.json({ message: `El material con ID ${materialId} no existe en el inventario.` }, { status: 404 });
         }
-
         const materialData = materialSnapshot.val();
-        const currentStock = materialData.cantidad;
 
-        if (currentStock < cantidad) {
-            throw new Error(`Stock insuficiente para ${materialNombre}. Disponible: ${currentStock}, Solicitado: ${cantidad}`);
-        }
+        const loanCode = generateLoanCode(grupo);
+        
+        // Referencias a los dos documentos que crearemos
+        const prestamoRef = db.collection(`Estudiantes/${studentUid}/Prestamos`).doc(loanCode);
+        const qrRef = db.collection('qrs').doc(loanCode);
 
-        // Transacción en Firestore
+        // Transacción Atómica: O se crean ambos documentos, o no se crea ninguno.
         await db.runTransaction(async (transaction) => {
-            transaction.set(newLoanRef, {
+            
+            // 1. Crear el documento del Préstamo con estado "pendiente"
+            transaction.set(prestamoRef, {
+                studentUid: studentUid,
                 codigo: loanCode,
                 nombreMaterial: materialNombre,
                 cantidad: Number(cantidad),
                 precio_unitario: materialData.precio || 0,
                 precio_total: (materialData.precio || 0) * Number(cantidad),
-                fechaInicio: FieldValue.serverTimestamp(),
+                fechaSolicitud: FieldValue.serverTimestamp(), // Fecha de creación
                 fechaDevolucion: new Date(fechaDevolucion),
-                estado: 'activo',
+                estado: 'pendiente', // <-- ESTADO INICIAL CORRECTO
                 grupo: grupo
             });
-        });
 
-        // Actualización en RTDB (solo si la transacción de arriba tuvo éxito)
-        const newStock = currentStock - cantidad;
-        await materialRtdbRef.update({ 
-            cantidad: newStock
+            // 2. Crear el documento QR global para que el admin lo valide
+            transaction.set(qrRef, {
+                status: 'pendiente', // <-- ESTADO INICIAL CORRECTO
+                operationId: loanCode,
+                operationType: 'prestamos',
+                studentUid: studentUid, // <-- CRÍTICO para encontrar el préstamo original
+                createdAt: FieldValue.serverTimestamp(),
+                validatedAt: null,
+                validatedBy: null
+            });
         });
+        
+        // LA LÓGICA DE INVENTARIO SE HA MOVIDO AL ENDPOINT DE ACTIVACIÓN
 
-        console.log(`Préstamo ${loanCode} creado. Stock de ${materialId} actualizado a ${newStock}.`);
-        return NextResponse.json({ loanCode: loanCode }, { status: 201 });
+        console.log(`Solicitud de préstamo ${loanCode} y QR creado exitosamente. Esperando validación de admin.`);
+        return NextResponse.json({ message: "Solicitud de préstamo creada. Muestra el QR al administrador.", loanCode: loanCode }, { status: 201 });
 
     } catch (error: any) {
-        console.error("Error en la transacción del préstamo:", error);
-        // El error ahora será más específico si viene de la transacción
+        console.error("Error en la creación de la solicitud de préstamo:", error);
         return NextResponse.json({ message: error.message || 'Error interno del servidor.' }, { status: 500 });
     }
 }

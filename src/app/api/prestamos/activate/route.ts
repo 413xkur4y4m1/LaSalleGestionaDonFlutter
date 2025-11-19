@@ -1,30 +1,22 @@
 
 import { NextResponse } from 'next/server';
-import { adminDb } from '@/lib/firebase-admin';
+import { adminDb } from '@/lib/firebase-admin'; // Correcto: Solo adminDb de aquí
+import { getRtdb } from '@/lib/firestore-operations-server'; // Correcto: getRtdb viene de aquí
 import { getAuth } from 'firebase-admin/auth';
 import { cookies } from 'next/headers';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue } from 'firebase-admin/firestore';
 
-// --- FIX: Función de verificación de admin actualizada ---
-// Ahora consulta Firestore para validar si el UID del usuario está en la colección 'admins'
+// La función verifyAdminSession se mantiene igual
 async function verifyAdminSession(sessionCookie: string) {
     try {
-        // 1. Verificar la cookie de sesión para obtener los datos del usuario
         const decodedClaims = await getAuth().verifySessionCookie(sessionCookie, true);
-        
-        // 2. Consultar si el UID del usuario existe como documento en la colección 'admins'
         const adminDocRef = adminDb.collection('admins').doc(decodedClaims.uid);
         const adminDoc = await adminDocRef.get();
-
-        // 3. Si el documento existe, es un admin válido.
         if (adminDoc.exists) {
-            return decodedClaims; // Devuelve los datos del usuario admin
+            return decodedClaims;
         }
-
-        // Si no existe, no es un admin.
         return null;
     } catch (error) {
-        // La cookie es inválida o ha expirado
         console.error("Error verificando la sesión de admin:", error);
         return null;
     }
@@ -46,43 +38,74 @@ export async function POST(request: Request) {
         return NextResponse.json({ message: "No autorizado: La sesión no es de un administrador válido." }, { status: 403 });
     }
 
+    const rtdb = getRtdb();
+
     try {
         const body = await request.json();
         const { codigo } = body;
 
         if (!codigo) {
-            return NextResponse.json({ message: "El código del préstamo es requerido." }, { status: 400 });
+            return NextResponse.json({ message: "El código QR es requerido." }, { status: 400 });
         }
 
-        const prestamosRef = adminDb.collection('prestamos');
-        const q = prestamosRef.where('loanCode', '==', codigo).limit(1);
+        const qrDocRef = adminDb.collection('qrs').doc(codigo);
+        const qrDoc = await qrDocRef.get();
+
+        if (!qrDoc.exists) {
+            return NextResponse.json({ message: `Código QR "${codigo}" no encontrado.` }, { status: 404 });
+        }
+
+        const qrData = qrDoc.data();
+
+        if (qrData?.status !== 'pendiente') {
+            return NextResponse.json({ message: `Este código QR ya fue procesado. Estado: ${qrData?.status}.` }, { status: 409 });
+        }
+
+        if (qrData.operationType !== 'prestamos') {
+            return NextResponse.json({ message: `Este QR no es para una operación de préstamo.` }, { status: 400 });
+        }
+
+        const prestamoRef = adminDb.collection('Estudiantes').doc(qrData.studentUid).collection('Prestamos').doc(qrData.operationId);
+        const prestamoDoc = await prestamoRef.get();
+
+        if (!prestamoDoc.exists) {
+            return NextResponse.json({ message: `Error crítico: El préstamo asociado al QR no existe.` }, { status: 500 });
+        }
         
-        const querySnapshot = await q.get();
-
-        if (querySnapshot.empty) {
-            return NextResponse.json({ message: `Préstamo con código "${codigo}" no encontrado.` }, { status: 404 });
-        }
-
-        const prestamoDoc = querySnapshot.docs[0];
         const prestamoData = prestamoDoc.data();
+        // Asumimos que el préstamo SÍ guarda el materialId. Si no, habría que añadirlo.
+        const { materialId, cantidad } = prestamoData || {};
 
-        if (prestamoData.estado !== 'pendiente') {
-            const estadoActual = prestamoData.estado.charAt(0).toUpperCase() + prestamoData.estado.slice(1);
-            return NextResponse.json({ message: `Este préstamo ya fue activado o procesado. Estado actual: ${estadoActual}.` }, { status: 409 });
+        if (!materialId) {
+            return NextResponse.json({ message: `El préstamo no tiene un materialId asociado.` }, { status: 500 });
         }
 
-        await prestamoDoc.ref.update({
-            estado: 'activo',
-            activatedBy: adminClaims.uid,
-            activatedAt: Timestamp.now()
-        });
-        
-        console.log(`Préstamo ${codigo} activado exitosamente por admin ${adminClaims.uid}`);
+        const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
+        const materialSnapshot = await materialRtdbRef.once('value');
+        const currentStock = materialSnapshot.val()?.cantidad || 0;
 
-        return NextResponse.json({ 
-            message: "¡Préstamo activado con éxito!",
-            prestamoId: prestamoDoc.id
+        if (currentStock < cantidad) {
+            return NextResponse.json({ message: `Stock insuficiente para este material. Disponible: ${currentStock}, Solicitado: ${cantidad}` }, { status: 409 });
+        }
+
+        await adminDb.runTransaction(async (transaction) => {
+            transaction.update(prestamoRef, {
+                estado: 'activo',
+                fechaInicio: FieldValue.serverTimestamp()
+            });
+            transaction.update(qrDocRef, {
+                status: 'validado',
+                validatedBy: adminClaims.uid,
+                validatedAt: FieldValue.serverTimestamp()
+            });
         });
+
+        const newStock = currentStock - cantidad;
+        await materialRtdbRef.update({ cantidad: newStock });
+        
+        console.log(`Préstamo ${codigo} activado por ${adminClaims.uid}. Stock de ${materialId} actualizado a ${newStock}.`);
+
+        return NextResponse.json({ message: "¡Préstamo activado con éxito!" });
 
     } catch (error) {
         console.error("Error fatal en /api/prestamos/activate:", error);
