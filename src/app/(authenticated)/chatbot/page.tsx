@@ -28,7 +28,7 @@ interface LoanState {
   returnDate?: Date;
 }
 
-// --- Componente de QR (CORREGIDO) ---
+// --- Componente de QR (LÓGICA DE DESCARGA CORREGIDA) ---
 interface QRCodeDisplayProps {
     loanCode: string;
     materialNombre: string;
@@ -41,42 +41,31 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
     const handleDownload = () => {
         if (!qrRef.current) return;
 
-        const svgElement = qrRef.current;
-        const svgData = new XMLSerializer().serializeToString(svgElement);
+        // ✅ Serializar el SVG a un string
+        const svgString = new XMLSerializer().serializeToString(qrRef.current);
+        // ✅ Crear un "Data URL" que el navegador entiende como un archivo
+        const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
 
-        const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+        // ✅ Crear un enlace de descarga para el archivo SVG
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        // ✅ El archivo se guardará como .svg, no como .png
+        const fileName = `${materialNombre.replace(/ /g, '_')}-${cantidad}.svg`;
+        link.download = fileName;
 
-        const svgSize = svgElement.getBoundingClientRect();
-        canvas.width = svgSize.width;
-        canvas.height = svgSize.height;
-
-        const img = new Image();
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0);
-            const pngUrl = canvas.toDataURL("image/png");
-
-            const link = document.createElement("a");
-            const fileName = `${materialNombre.replace(/ /g, '_')}-${cantidad}.png`;
-            link.download = fileName;
-            link.href = pngUrl;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        };
-        img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     return (
         <div className="bg-white p-4 rounded-lg flex flex-col items-center gap-3 border border-gray-200 shadow-md">
-            {/* CORRECCIÓN: El valor del QR es ahora solo el loanCode */}
             <QRCodeSVG value={loanCode} size={192} ref={qrRef} />
             <p className="font-mono text-xl font-bold text-gray-800">{loanCode}</p>
             <p className="text-sm text-center text-gray-600">Muestra este código al administrador.</p>
             <Button onClick={handleDownload} variant="outline" className="w-full">
                 <Download className="mr-2 h-4 w-4" />
-                Descargar QR
+                Descargar QR (SVG)
             </Button>
         </div>
     );

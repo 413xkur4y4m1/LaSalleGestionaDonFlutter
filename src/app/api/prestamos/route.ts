@@ -5,8 +5,6 @@ import { getDb, getRtdb } from '@/lib/firestore-operations-server';
 import { FieldValue } from 'firebase-admin/firestore';
 
 // --- GET (No se modifica) ---
-// ... (El código GET se mantiene igual que antes)
-
 export async function GET(req: NextRequest) {
     try {
         const db = getDb();
@@ -17,7 +15,6 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ message: 'El ID del estudiante es requerido.' }, { status: 400 });
         }
 
-        // Esta consulta podría ajustarse para incluir 'pendiente' si se necesita en la UI del estudiante
         const loansCollectionRef = db.collection(`Estudiantes/${studentUid}/Prestamos`);
         const q = loansCollectionRef.where('estado', '==', 'activo');
         const querySnapshot = await q.get();
@@ -41,7 +38,7 @@ export async function GET(req: NextRequest) {
 }
 
 
-// --- POST (MODIFICADO PARA EL NUEVO FLUJO DE VALIDACIÓN) ---
+// --- POST (CORREGIDO PARA INCLUIR materialId) ---
 
 const generateLoanCode = (grupo: string) => {
     const randomPart = Math.floor(10000 + Math.random() * 90000);
@@ -60,7 +57,6 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ message: 'Faltan datos requeridos.' }, { status: 400 });
         }
         
-        // Se sigue consultando RTDB solo para obtener el precio del material.
         const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
         const materialSnapshot = await materialRtdbRef.once('value');
         if (!materialSnapshot.exists()) {
@@ -70,41 +66,36 @@ export async function POST(req: NextRequest) {
 
         const loanCode = generateLoanCode(grupo);
         
-        // Referencias a los dos documentos que crearemos
         const prestamoRef = db.collection(`Estudiantes/${studentUid}/Prestamos`).doc(loanCode);
         const qrRef = db.collection('qrs').doc(loanCode);
 
-        // Transacción Atómica: O se crean ambos documentos, o no se crea ninguno.
         await db.runTransaction(async (transaction) => {
             
-            // 1. Crear el documento del Préstamo con estado "pendiente"
             transaction.set(prestamoRef, {
                 studentUid: studentUid,
                 codigo: loanCode,
+                materialId: materialId, // <-- ✅ CORRECCIÓN: Se añade el materialId
                 nombreMaterial: materialNombre,
                 cantidad: Number(cantidad),
                 precio_unitario: materialData.precio || 0,
                 precio_total: (materialData.precio || 0) * Number(cantidad),
-                fechaSolicitud: FieldValue.serverTimestamp(), // Fecha de creación
+                fechaSolicitud: FieldValue.serverTimestamp(),
                 fechaDevolucion: new Date(fechaDevolucion),
-                estado: 'pendiente', // <-- ESTADO INICIAL CORRECTO
+                estado: 'pendiente',
                 grupo: grupo
             });
 
-            // 2. Crear el documento QR global para que el admin lo valide
             transaction.set(qrRef, {
-                status: 'pendiente', // <-- ESTADO INICIAL CORRECTO
+                status: 'pendiente',
                 operationId: loanCode,
                 operationType: 'prestamos',
-                studentUid: studentUid, // <-- CRÍTICO para encontrar el préstamo original
+                studentUid: studentUid,
                 createdAt: FieldValue.serverTimestamp(),
                 validatedAt: null,
                 validatedBy: null
             });
         });
         
-        // LA LÓGICA DE INVENTARIO SE HA MOVIDO AL ENDPOINT DE ACTIVACIÓN
-
         console.log(`Solicitud de préstamo ${loanCode} y QR creado exitosamente. Esperando validación de admin.`);
         return NextResponse.json({ message: "Solicitud de préstamo creada. Muestra el QR al administrador.", loanCode: loanCode }, { status: 201 });
 
