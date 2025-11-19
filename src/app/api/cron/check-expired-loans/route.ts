@@ -1,85 +1,77 @@
 
-import { NextRequest, NextResponse } from 'next/server'; // <-- FIX: Importar NextRequest
+import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
 
-// FIX: La función ahora acepta el objeto `request`
 export async function GET(request: NextRequest) {
-  // 1. --- ¡SEGURIDAD PRIMERO! (FORMA CORREGIDA) ---
-  // Se obtienen las cabeceras directamente del objeto `request`
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret) {
-    console.error("[CRON JOB ERROR]: La variable de entorno CRON_SECRET no está configurada.");
-    return NextResponse.json({ message: "Configuración de servidor incompleta." }, { status: 500 });
-  }
-
   if (authHeader !== `Bearer ${cronSecret}`) {
-    console.warn("[CRON JOB-CEXP]: Intento de acceso no autorizado.");
     return NextResponse.json({ message: "No autorizado." }, { status: 401 });
   }
-  
+
   console.log("\n--- [CRON | check-expired-loans]: Verificando préstamos vencidos... ---");
   const db = getDb();
+  const now = new Date();
+  let processedCount = 0;
 
   try {
     const studentsSnapshot = await db.collection('Estudiantes').get();
-    
     if (studentsSnapshot.empty) {
       console.log("[CRON | check-expired-loans]: No se encontraron estudiantes.");
       return NextResponse.json({ message: "No se encontraron estudiantes." });
     }
 
-    let processedCount = 0;
-    const now = new Date();
-    const promises = [];
+    const batchPromises = [];
 
-    // 2. Iteramos sobre cada estudiante de forma más eficiente
     for (const studentDoc of studentsSnapshot.docs) {
-      const studentId = studentDoc.id;
       const studentData = studentDoc.data();
-
       const loansRef = studentDoc.ref.collection('Prestamos');
-      // Buscamos préstamos activos cuya fecha de devolución sea menor a la actual
+      
+      // 1. --- BUSCAMOS PRÉSTAMOS ACTIVOS Y VENCIDOS ---
       const expiredLoansQuery = loansRef
         .where('estado', '==', 'activo')
         .where('fechaDevolucion', '<', now);
-        
-      const promise = expiredLoansQuery.get().then(loansSnapshot => {
-        if (loansSnapshot.empty) return;
 
-        console.log(`[CRON | c-exp]: Estudiante ${studentData.nombre || studentId} tiene ${loansSnapshot.size} préstamos vencidos.`);
+      const loansSnapshot = await expiredLoansQuery.get();
+      if (loansSnapshot.empty) continue;
 
-        // Procesamos cada préstamo vencido encontrado
-        for (const loanDoc of loansSnapshot.docs) {
-          processedCount++;
-          const loanData = loanDoc.data();
-          console.log(` -> Procesando préstamo ${loanDoc.id} (${loanData.nombreMaterial}).`);
-          
-          const adeudoRef = studentDoc.ref.collection('Adeudos').doc(loanDoc.id);
+      console.log(`[CRON | c-exp]: Estudiante ${studentData.nombre || studentDoc.id} tiene ${loansSnapshot.size} préstamos vencidos.`);
 
-          // Transacción atómica para garantizar la integridad de los datos
-          const transactionPromise = db.runTransaction(async (transaction) => {
-            transaction.set(adeudoRef, {
-              ...loanData,
-              estado: 'adeudo', // El estado cambia a 'adeudo'
-              fechaVencimiento: loanData.fechaDevolucion,
-              formSent: false, // ¡NUEVO! Campo para controlar el envío del formulario
-            });
-            transaction.delete(loanDoc.ref);
-          });
-          return transactionPromise;
-        }
-      });
-      promises.push(promise);
+      const writeBatch = db.batch();
+
+      for (const loanDoc of loansSnapshot.docs) {
+        processedCount++;
+        const loanData = loanDoc.data();
+        console.log(` -> Procesando préstamo ${loanDoc.id} (${loanData.nombreMaterial}).`);
+
+        // 2. --- ACTUALIZAMOS EL ESTADO DEL PRÉSTAMO ---
+        writeBatch.update(loanDoc.ref, {
+          estado: 'expirado',
+          fechaExpiracion: admin.firestore.Timestamp.now()
+        });
+
+        // 3. --- CREAMOS LA NOTIFICACIÓN INTERNA ---
+        const notificationRef = studentDoc.ref.collection('Notificaciones').doc();
+        writeBatch.set(notificationRef, {
+          tipo: 'vencimiento',
+          prestamoId: loanDoc.id,
+          mensaje: `⚠️ Tu préstamo de ${loanData.nombreMaterial || 'material'} ha vencido.`,
+          enviado: true,
+          fechaEnvio: admin.firestore.Timestamp.now(),
+          canal: 'interno',
+          leida: false
+        });
+      }
+      // Agregamos el batch a un array de promesas para ejecutarlo
+      batchPromises.push(writeBatch.commit());
     }
 
-    await Promise.all(promises);
+    await Promise.all(batchPromises);
 
-    console.log(`--- [CRON | check-expired-loans]: Finalizado. ${processedCount} préstamos movidos a adeudos. ---\n`);
+    console.log(`--- [CRON | check-expired-loans]: Finalizado. ${processedCount} préstamos marcados como expirados. ---\n`);
     if (processedCount > 0) {
-        return NextResponse.json({ message: `Proceso completado. ${processedCount} préstamos se movieron a adeudos.` });
+      return NextResponse.json({ message: `Proceso completado. ${processedCount} préstamos se marcaron como expirados.` });
     }
     return NextResponse.json({ message: "Proceso completado. No se encontraron préstamos vencidos." });
 

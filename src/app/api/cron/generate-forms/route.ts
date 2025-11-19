@@ -1,122 +1,101 @@
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
-import { ai, overduePrompt, Student, loanTool } from '@/ai/genkit';
 
 export async function GET(request: NextRequest) {
-  // 1. --- SEGURIDAD PRIMERO ---
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    console.warn('[CRON | generate-forms]: Intento de acceso no autorizado');
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ message: "No autorizado." }, { status: 401 });
   }
 
-  console.log("\n--- [CRON | generate-forms]: Iniciando búsqueda de adeudos... ---");
+  console.log("\n--- [CRON | generate-forms]: Buscando préstamos expirados para generar formulario... ---");
   const db = getDb();
+  let formsSentCount = 0;
+  // CORRECTO: Se usará para comparar contra la fecha de expiración
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   try {
     const studentsSnapshot = await db.collection('Estudiantes').get();
-    
     if (studentsSnapshot.empty) {
-      console.log('[CRON | generate-forms]: No se encontraron estudiantes en la base de datos');
-      return NextResponse.json({ 
-        message: "No se encontraron estudiantes.",
-        formsSent: 0 
-      });
+      return NextResponse.json({ message: "No se encontraron estudiantes." });
     }
 
-    let formsSentCount = 0;
-    const promises: Promise<void>[] = [];
+    const formPromises = [];
 
     for (const studentDoc of studentsSnapshot.docs) {
-      const studentData = studentDoc.data();
       const studentId = studentDoc.id;
+      const studentData = studentDoc.data();
+      const loansRef = studentDoc.ref.collection('Prestamos');
+      const formsRef = studentDoc.ref.collection('Formularios');
 
-      const adeudosRef = studentDoc.ref.collection('Adeudos');
-      const newAdeudosQuery = adeudosRef.where('formSent', '==', false);
+      // 1. --- LÓGICA CORREGIDA: BUSCAMOS PRÉSTAMOS EXPIRADOS HACE MÁS DE 24 HORAS ---
+      const expiredLoansQuery = loansRef
+        .where('estado', '==', 'expirado')
+        .where('fechaExpiracion', '<', twentyFourHoursAgo); // <-- ¡EL FIX CRÍTICO ESTÁ AQUÍ!
 
-      const promise = newAdeudosQuery.get().then(async (adeudosSnapshot) => {
-        if (adeudosSnapshot.empty) return;
+      const loansSnapshot = await expiredLoansQuery.get();
+      if (loansSnapshot.empty) continue;
 
-        console.log(`[CRON | generate-forms]: Estudiante ${studentData.nombre || studentId} tiene ${adeudosSnapshot.size} adeudos pendientes.`);
+      console.log(`[CRON | g-forms]: Estudiante ${studentData.nombre || studentId} tiene ${loansSnapshot.size} préstamos listos para formulario.`);
 
-        for (const adeudoDoc of adeudosSnapshot.docs) {
-          const adeudoData = adeudoDoc.data();
-          
-          try {
-            console.log(`  -> Procesando adeudo ${adeudoDoc.id} (${adeudoData.nombreMaterial || 'Material desconocido'}).`);
+      for (const loanDoc of loansSnapshot.docs) {
+        const loanData = loanDoc.data();
+        const prestamoId = loanDoc.id;
 
-            const studentInfo: Student = {
-              id: studentId,
-              name: studentData.nombre || 'Estudiante',
-              email: studentData.correo || 'N/A',
-            };
+        const processPromise = async () => {
+          // 2. --- VERIFICAMOS QUE NO EXISTA YA UN FORMULARIO PARA ESTE PRÉSTAMO ---
+          const existingFormQuery = formsRef.where('prestamoId', '==', prestamoId).limit(1);
+          const existingFormSnap = await existingFormQuery.get();
 
-            // 2. --- GENERACIÓN DE LA CONVERSACIÓN CON GENKIT ---
-            const llmResponse = await overduePrompt({
-              student: studentInfo,
-              material: adeudoData.nombreMaterial || 'Material sin nombre',
-              quantity: adeudoData.cantidad || 1,
-            });
-
-            const messageContent = llmResponse.text;
-
-            if (!messageContent || messageContent.trim().length === 0) {
-              console.warn(`  -> Advertencia: Respuesta vacía de Genkit para adeudo ${adeudoDoc.id}`);
-              continue;
-            }
-
-            // 3. --- GUARDAR EL MENSAJE EN EL CHAT DEL ESTUDIANTE ---
-            const chatMessageRef = studentDoc.ref.collection('ChatMessages').doc();
-            await chatMessageRef.set({
-              role: 'model',
-              text: messageContent,
-              timestamp: admin.firestore.FieldValue.serverTimestamp(),
-              read: false,
-              adeudoId: adeudoDoc.id,
-              materialName: adeudoData.nombreMaterial || 'Material desconocido',
-            });
-
-            // 4. --- MARCAR EL FORMULARIO COMO ENVIADO ---
-            await adeudoDoc.ref.update({ 
-              formSent: true,
-              formSentAt: admin.firestore.FieldValue.serverTimestamp(),
-            });
-
-            formsSentCount++;
-            console.log(`  ✓ Formulario enviado y adeudo actualizado correctamente.`);
-
-          } catch (adeudoError: any) {
-            console.error(`  ✗ Error procesando adeudo ${adeudoDoc.id}:`, adeudoError.message);
-            // Continuar con el siguiente adeudo sin detener el proceso
+          if (!existingFormSnap.empty) {
+            console.log(` -> Formulario para préstamo ${prestamoId} ya existe. Saltando.`);
+            return;
           }
-        }
-      }).catch((studentError: any) => {
-        console.error(`[CRON | generate-forms]: Error procesando estudiante ${studentId}:`, studentError.message);
-        // Continuar con el siguiente estudiante
-      });
+          
+          console.log(` -> Generando formulario para préstamo ${prestamoId} (${loanData.nombreMaterial}).`);
 
-      promises.push(promise);
+          const formId = `FORM-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const formUrl = `${process.env.NEXT_PUBLIC_APP_URL || ''}/formularios/${formId}`;
+          const pregunta = `No has devuelto ${loanData.nombreMaterial || 'el material'}. ¿Qué sucedió?`;
+
+          const formData = {
+            formId,
+            prestamoId,
+            tipo: 'seguimiento',
+            pregunta,
+            opciones: ['Lo tengo pero no lo he devuelto', 'Lo rompí', 'Lo perdí'],
+            respuesta: '',
+            estado: 'pendiente',
+            fechaCreacion: admin.firestore.Timestamp.now(),
+            urlFormulario: formUrl
+          };
+
+          const batch = db.batch();
+          const notificationsRef = studentDoc.ref.collection('Notificaciones');
+          const globalFormsRef = db.collection('FormulariosGlobal');
+          
+          // 3. --- CREACIÓN DE LOS 3 DOCUMENTOS EN BATCH ---
+          batch.set(formsRef.doc(formId), formData);
+          batch.set(globalFormsRef.doc(formId), { ...formData, uid: studentId, nombreEstudiante: studentData.nombre || '', correoEstudiante: studentData.correo || '' });
+          batch.set(notificationsRef.doc(), { tipo: 'formulario', prestamoId: prestamoId, mensaje: `📋 Por favor completa este formulario sobre tu préstamo vencido.`, formUrl: formUrl, enviado: true, fechaEnvio: admin.firestore.Timestamp.now(), canal: 'interno', leida: false });
+          
+          await batch.commit();
+          formsSentCount++;
+          console.log(`   -> Formulario ${formId} creado y notificado.`);
+        };
+        formPromises.push(processPromise());
+      }
     }
 
-    await Promise.all(promises);
+    await Promise.all(formPromises);
 
-    console.log(`--- [CRON | generate-forms]: ✓ Finalizado. ${formsSentCount} formularios enviados exitosamente. ---\n`);
-    
-    return NextResponse.json({ 
-      message: `Proceso completado exitosamente.`,
-      formsSent: formsSentCount,
-      timestamp: new Date().toISOString(),
-    });
+    console.log(`--- [CRON | generate-forms]: Finalizado. ${formsSentCount} formularios generados. ---\n`);
+    return NextResponse.json({ message: `Proceso completado. Se generaron ${formsSentCount} formularios de seguimiento.` });
 
   } catch (error: any) {
-    console.error("[CRON | generate-forms ERROR CRÍTICO]:", error);
-    return NextResponse.json({ 
-      message: "Error crítico durante la ejecución del proceso CRON.", 
-      error: error.message,
-      timestamp: new Date().toISOString(),
-    }, { status: 500 });
+    console.error("[CRON | generate-forms ERROR]:", error);
+    return NextResponse.json({ message: "Error durante la ejecución del proceso CRON.", error: error.message }, { status: 500 });
   }
 }
