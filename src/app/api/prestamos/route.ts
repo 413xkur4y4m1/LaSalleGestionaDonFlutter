@@ -1,4 +1,5 @@
 
+// FORZANDO LA ACTUALIZACIÓN DE CACHÉ PARA INCLUIR LA DATABASE URL
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getRtdb } from '@/lib/firestore-operations-server';
 import { FieldValue } from 'firebase-admin/firestore';
