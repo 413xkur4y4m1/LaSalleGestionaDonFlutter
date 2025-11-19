@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useTransition } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { toast } from 'sonner';
@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { LoaderCircle, CheckCircle, XCircle, ScanLine } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-// Paso 1: Importar la nueva Server Action
-import { activatePrestamoAction } from './actions';
+
+// PASO 1: Importar AMBAS Server Actions
+import { getPrestamoDetailsAction, activatePrestamoAction } from './actions';
 
 // --- Tipos de Datos (sin cambios) ---
 interface PrestamoDetails {
@@ -23,7 +24,7 @@ interface PrestamoDetails {
     fechaSolicitud: string;
 }
 
-// --- Componente de Detalles (sin cambios) ---
+// --- Componente de la Tarjeta de Información (sin cambios) ---
 const PrestamoInfoCard = ({ details, onActivate, isLoading }: { details: PrestamoDetails, onActivate: () => void, isLoading: boolean }) => {
     const estadoMap = {
         pendiente: { text: 'Pendiente de Entrega', color: 'bg-yellow-500' },
@@ -60,84 +61,98 @@ const PrestamoInfoCard = ({ details, onActivate, isLoading }: { details: Prestam
     );
 };
 
-// --- Componente Principal (lógica actualizada) ---
+
+// --- Componente Principal (LÓGICA TOTALMENTE RENOVADA) ---
 const ScanPageContent = () => {
     const searchParams = useSearchParams();
-    const initialCode = searchParams ? searchParams.get('codigo') : null; 
+    // CORRECCIÓN: Añadido optional chaining (?.) para evitar el error si searchParams es null.
+    const initialCodeFromUrl = searchParams?.get('codigo');
 
-    const [scannedCode, setScannedCode] = useState<string | null>(initialCode);
+    const [scannedCode, setScannedCode] = useState<string | null>(null);
     const [prestamo, setPrestamo] = useState<PrestamoDetails | null>(null);
-    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [isActivating, setIsActivating] = useState(false);
+    
+    // Transiciones para manejar estados de carga de las Server Actions
+    const [isFetching, startFetching] = useTransition();
+    const [isActivating, startActivating] = useTransition();
 
-    const fetchPrestamoDetails = async (codigo: string) => {
-        setIsLoading(true);
-        setError(null);
-        setPrestamo(null);
-        try {
-            const response = await fetch(`/api/prestamos/details?codigo=${codigo}`);
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.message || 'Error al buscar el préstamo.');
-            setPrestamo(data);
-            toast.success(`Préstamo ${codigo} encontrado.`);
-        } catch (err: any) {
-            setError(err.message);
-            toast.error(err.message);
-        } finally {
-            setIsLoading(false);
+    // PASO 1C: Función para extraer el código de una URL
+    const extractLoanCode = (data: string): string | null => {
+        if (data.startsWith('http')) {
+            try {
+                const url = new URL(data);
+                return url.searchParams.get('codigo');
+            } catch (e) {
+                return null; // URL inválida
+            }
         }
+        return data; // Ya es un código
     };
 
-    // Paso 2: Usar la Server Action en lugar de fetch
-    const handleActivate = async () => {
+    const handleCodeDetection = (codigo: string) => {
+        setError(null);
+        setPrestamo(null);
+        setScannedCode(codigo);
+
+        startFetching(async () => {
+            const result = await getPrestamoDetailsAction(codigo);
+            if (result.success && result.data) {
+                setPrestamo(result.data as PrestamoDetails);
+                toast.success(`Préstamo ${codigo} encontrado.`);
+            } else {
+                const errorMessage = result.message || 'Error desconocido al buscar el préstamo.';
+                setError(errorMessage);
+                toast.error(errorMessage);
+            }
+        });
+    };
+
+    const handleActivate = () => {
         if (!scannedCode) return;
-        setIsActivating(true);
-        try {
+
+        startActivating(async () => {
             const result = await activatePrestamoAction(scannedCode);
             if (result.success) {
                 toast.success(result.message);
-                // Refrescamos los detalles para mostrar el nuevo estado "activo"
-                fetchPrestamoDetails(scannedCode);
+                // Refrescamos los detalles para mostrar el nuevo estado 'activo'
+                handleCodeDetection(scannedCode);
             } else {
-                throw new Error(result.message);
+                const errorMessage = result.message || 'Error desconocido al activar.';
+                toast.error(errorMessage);
             }
-        } catch (err: any) {
-            toast.error(err.message);
-        } finally {
-            setIsActivating(false);
-        }
+        });
     };
 
     useEffect(() => {
-        if (initialCode) {
-            fetchPrestamoDetails(initialCode);
+        if (initialCodeFromUrl) {
+            const extracted = extractLoanCode(initialCodeFromUrl);
+            if (extracted) {
+                handleCodeDetection(extracted);
+            }
         }
-    }, [initialCode]);
+    }, [initialCodeFromUrl]);
 
     const handleScanResult = (result: string) => {
-        if (!result) return; // Evitar procesar resultados vacíos
-        toast.info(`Código QR detectado: ${result}`);
-        setScannedCode(result);
-        fetchPrestamoDetails(result);
-    }
+        if (!result) return;
+        const extracted = extractLoanCode(result);
+        if (extracted) {
+            handleCodeDetection(extracted);
+        } else {
+            toast.error('El código QR no contiene un código de préstamo válido.');
+        }
+    };
 
-    const handleScanError = (error: unknown) => {
-        toast.error(error instanceof Error ? `Error de escaneo: ${error.message}` : "Ocurrió un error de escaneo desconocido.");
-    }
-
-    // --- Renderizado (sin cambios) ---
     return (
         <div className="container mx-auto p-4 md:p-8">
             <h1 className="text-3xl font-bold text-center mb-2 text-gray-800">Escanear Código de Préstamo</h1>
-            <p className="text-center text-gray-500 mb-8">Apunta la cámara al código QR del estudiante para ver y activar el préstamo.</p>
+            <p className="text-center text-gray-500 mb-8">Apunta la cámara al código QR para ver y activar el préstamo.</p>
+
             {!scannedCode && (
-                 <Card className="w-full max-w-md mx-auto overflow-hidden">
+                <Card className="w-full max-w-md mx-auto overflow-hidden">
                      <CardContent className="p-0 relative aspect-square">
-                         <div className="absolute inset-0">
+                        <div className="absolute inset-0">
                              <Scanner 
                                  onScan={(result) => handleScanResult(result[0]?.rawValue || '')}
-                                 onError={handleScanError}
                                  constraints={{ facingMode: 'environment' }}
                              />
                          </div>
@@ -148,9 +163,11 @@ const ScanPageContent = () => {
                      </CardContent>
                  </Card>
             )}
-            {isLoading && <div className="flex justify-center items-center p-8"><LoaderCircle className="animate-spin h-10 w-10 text-gray-600" /> <p className='ml-3'>Buscando préstamo...</p></div>}
+
+            {isFetching && <div className="flex justify-center items-center p-8"><LoaderCircle className="animate-spin h-10 w-10 text-gray-600" /> <p className='ml-3'>Buscando préstamo...</p></div>}
             {error && <div className="text-center text-red-500 font-bold p-8"><XCircle className="mx-auto h-8 w-8 mb-2"/> {error}</div>}
             {prestamo && <PrestamoInfoCard details={prestamo} onActivate={handleActivate} isLoading={isActivating} />}
+
             {(scannedCode || error) && (
                 <div className="text-center mt-8">
                     <Button variant="outline" onClick={() => { setScannedCode(null); setPrestamo(null); setError(null); }}>
@@ -160,7 +177,7 @@ const ScanPageContent = () => {
             )}
         </div>
     );
-}
+};
 
 export default function ScanPage() {
     return (

@@ -28,7 +28,7 @@ interface LoanState {
   returnDate?: Date;
 }
 
-// --- Componente de QR Inteligente con Descarga ---
+// --- Componente de QR (CORREGIDO) ---
 interface QRCodeDisplayProps {
     loanCode: string;
     materialNombre: string;
@@ -36,13 +36,7 @@ interface QRCodeDisplayProps {
 }
 
 const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre, cantidad }) => {
-    const [qrUrl, setQrUrl] = useState('');
     const qrRef = useRef<SVGSVGElement>(null);
-
-    useEffect(() => {
-        const fullUrl = `${window.location.origin}/admin/scan?codigo=${loanCode}`;
-        setQrUrl(fullUrl);
-    }, [loanCode]);
 
     const handleDownload = () => {
         if (!qrRef.current) return;
@@ -74,13 +68,10 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
         img.src = `data:image/svg+xml;base64,${btoa(svgData)}`;
     };
 
-    if (!qrUrl) {
-        return <div className="flex justify-center items-center p-8"><LoaderCircle className="animate-spin h-8 w-8 text-gray-400" /></div>;
-    }
-
     return (
         <div className="bg-white p-4 rounded-lg flex flex-col items-center gap-3 border border-gray-200 shadow-md">
-            <QRCodeSVG value={qrUrl} size={192} ref={qrRef} />
+            {/* CORRECCIÓN: El valor del QR es ahora solo el loanCode */}
+            <QRCodeSVG value={loanCode} size={192} ref={qrRef} />
             <p className="font-mono text-xl font-bold text-gray-800">{loanCode}</p>
             <p className="text-sm text-center text-gray-600">Muestra este código al administrador.</p>
             <Button onClick={handleDownload} variant="outline" className="w-full">
@@ -92,7 +83,7 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
 };
 
 
-// --- COMPONENTE PRINCIPAL: GASTROBOT ---
+// --- COMPONENTE PRINCIPAL: GASTROBOT (Sin cambios) ---
 const Gastrobot = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -177,7 +168,6 @@ const Gastrobot = () => {
               body: JSON.stringify(body),
           });
 
-          // Lee la respuesta JSON una sola vez
           const data = await response.json();
 
           removeMessageFromChat(loadingId);

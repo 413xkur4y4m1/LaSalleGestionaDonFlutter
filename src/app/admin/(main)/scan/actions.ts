@@ -7,7 +7,7 @@ import { getDb, getRtdb } from '@/lib/firestore-operations-server';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
-// The admin verification function, now using getDb()
+// --- Función de Verificación de Admin (Sin Cambios) ---
 async function verifyAdminSession(sessionCookie: string) {
     const db = getDb();
     try {
@@ -21,21 +21,68 @@ async function verifyAdminSession(sessionCookie: string) {
     }
 }
 
-// --- Server Action to Activate Loan ---
+// --- ACCIÓN: Obtener Detalles del Préstamo ---
+export async function getPrestamoDetailsAction(codigo: string) {
+    const db = getDb();
+    try {
+        const qrDocRef = db.collection('qrs').doc(codigo);
+        const qrDoc = await qrDocRef.get();
+
+        if (!qrDoc.exists) {
+            return { success: false, message: `Código QR "${codigo}" no encontrado.` };
+        }
+        const qrData = qrDoc.data();
+
+        if (!qrData || qrData.operationType !== 'prestamos' || !qrData.studentUid || !qrData.operationId) {
+            return { success: false, message: 'El código QR es inválido o no está asociado a un préstamo.' };
+        }
+
+        const prestamoRef = db.collection('Estudiantes').doc(qrData.studentUid).collection('Prestamos').doc(qrData.operationId);
+        const prestamoDoc = await prestamoRef.get();
+
+        if (!prestamoDoc.exists) {
+            return { success: false, message: 'Error crítico: No se encontró el documento de préstamo asociado al QR.' };
+        }
+        const prestamoData = prestamoDoc.data();
+         if (!prestamoData) {
+            return { success: false, message: 'El documento del préstamo está vacío.' };
+        }
+
+        const userRef = db.collection('users').doc(qrData.studentUid);
+        const userDoc = await userRef.get();
+        // CORRECCIÓN: Cambiado de userDoc.exists() a userDoc.exists
+        const studentName = userDoc.exists ? userDoc.data()?.name : 'Estudiante Desconocido';
+
+        const details = {
+            id: prestamoDoc.id,
+            loanCode: prestamoData.codigo,
+            studentName: studentName,
+            materialNombre: prestamoData.nombreMaterial,
+            cantidad: prestamoData.cantidad,
+            estado: prestamoData.estado,
+            fechaSolicitud: prestamoData.fechaSolicitud.toDate().toISOString(),
+        };
+
+        return { success: true, data: details };
+
+    } catch (error: any) {
+        console.error("Error en getPrestamoDetailsAction:", error);
+        return { success: false, message: error.message || 'Error interno del servidor al buscar detalles.' };
+    }
+}
+
+
+// --- Acción para Activar el Préstamo (Sin Cambios) ---
 export async function activatePrestamoAction(codigo: string) {
-    // 1. SESSION VERIFICATION
-    // CORRECTED: Added 'await' before 'cookies()'
     const sessionCookie = (await cookies()).get('__session')?.value;
     if (!sessionCookie) {
         return { success: false, message: 'No autorizado: No hay sesión.' };
     }
-
     const adminClaims = await verifyAdminSession(sessionCookie);
     if (!adminClaims) {
         return { success: false, message: 'No autorizado: La sesión no es de un administrador válido.' };
     }
 
-    // 2. ACTIVATION LOGIC
     const db = getDb();
     const rtdb = getRtdb();
 
@@ -86,9 +133,7 @@ export async function activatePrestamoAction(codigo: string) {
         await materialRtdbRef.update({ cantidad: newStock });
 
         console.log(`Préstamo ${codigo} activado por ${adminClaims.uid}. Stock de ${materialId} actualizado a ${newStock}.`);
-        
         revalidatePath('/admin/scan');
-
         return { success: true, message: '¡Préstamo activado con éxito!' };
 
     } catch (error: any) {
