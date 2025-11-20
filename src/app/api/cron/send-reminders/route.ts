@@ -1,16 +1,34 @@
-
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
+  // ✅ CORRECCIÓN: Header con mayúscula
+  const authHeader = request.headers.get('Authorization');
   const cronSecret = process.env.CRON_SECRET;
+
+  console.log('🔍 Debug Auth:', {
+    receivedHeader: authHeader ? 'Presente' : 'Ausente',
+    expectedSecret: cronSecret ? 'Configurado' : 'NO CONFIGURADO',
+    match: authHeader === `Bearer ${cronSecret}`
+  });
+
+  if (!cronSecret) {
+    console.error('❌ CRON_SECRET no está configurado en las variables de entorno');
+    return NextResponse.json({ 
+      message: "Error de configuración del servidor." 
+    }, { status: 500 });
+  }
+
   if (authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ message: "No autorizado." }, { status: 401 });
+    console.error('❌ Autorización fallida');
+    return NextResponse.json({ 
+      message: "No autorizado." 
+    }, { status: 401 });
   }
 
   console.log("\n--- [CRON | send-reminders]: Buscando préstamos por vencer... ---");
+  
   const db = getDb();
   let remindersSentCount = 0;
   const now = new Date();
@@ -18,8 +36,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const studentsSnapshot = await db.collection('Estudiantes').get();
+    
     if (studentsSnapshot.empty) {
-      return NextResponse.json({ message: "No se encontraron estudiantes." });
+      return NextResponse.json({ 
+        message: "No se encontraron estudiantes." 
+      });
     }
 
     const reminderPromises = [];
@@ -36,9 +57,12 @@ export async function GET(request: NextRequest) {
         .where('fechaDevolucion', '<=', reminderWindow);
 
       const loansSnapshot = await reminderQuery.get();
+      
       if (loansSnapshot.empty) continue;
 
-      console.log(`[CRON | s-rem]: Estudiante ${studentData.nombre || studentDoc.id} tiene ${loansSnapshot.size} préstamos por vencer.`);
+      console.log(
+        `[CRON | s-rem]: Estudiante ${studentData.nombre || studentDoc.id} tiene ${loansSnapshot.size} préstamos por vencer.`
+      );
 
       for (const loanDoc of loansSnapshot.docs) {
         const loanData = loanDoc.data();
@@ -52,13 +76,18 @@ export async function GET(request: NextRequest) {
           .get()
           .then(existingNotifSnap => {
             if (!existingNotifSnap.empty) {
-              console.log(` -> Recordatorio para préstamo ${prestamoId} ya fue enviado. Saltando.`);
+              console.log(
+                ` -> Recordatorio para préstamo ${prestamoId} ya fue enviado. Saltando.`
+              );
               return; // Si ya existe, no hacemos nada
             }
 
             // 3. --- SI NO EXISTE, CREAMOS LA NUEVA NOTIFICACIÓN ---
-            console.log(` -> Preparando recordatorio para préstamo ${prestamoId} (${loanData.nombreMaterial}).`);
+            console.log(
+              ` -> Preparando recordatorio para préstamo ${prestamoId} (${loanData.nombreMaterial}).`
+            );
             remindersSentCount++;
+            
             return notificationsRef.add({
               tipo: 'recordatorio',
               prestamoId: prestamoId,
@@ -76,11 +105,19 @@ export async function GET(request: NextRequest) {
 
     await Promise.all(reminderPromises);
 
-    console.log(`--- [CRON | send-reminders]: Finalizado. ${remindersSentCount} recordatorios enviados. ---\n`);
-    return NextResponse.json({ message: `Proceso completado. Se enviaron ${remindersSentCount} recordatorios.` });
+    console.log(
+      `--- [CRON | send-reminders]: Finalizado. ${remindersSentCount} recordatorios enviados. ---\n`
+    );
+    
+    return NextResponse.json({ 
+      message: `Proceso completado. Se enviaron ${remindersSentCount} recordatorios.` 
+    });
 
   } catch (error: any) {
     console.error("[CRON | send-reminders ERROR]:", error);
-    return NextResponse.json({ message: "Error durante la ejecución del proceso CRON.", error: error.message }, { status: 500 });
+    return NextResponse.json({ 
+      message: "Error durante la ejecución del proceso CRON.", 
+      error: error.message 
+    }, { status: 500 });
   }
 }
