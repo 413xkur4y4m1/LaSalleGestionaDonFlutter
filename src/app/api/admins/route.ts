@@ -7,47 +7,44 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { sendAdminCredentials } from '@/lib/emailService'; 
 import { randomBytes } from 'crypto';
 
-// Función de verificación de admin (CORREGIDA)
+// Función de verificación de admin adaptada a tu sistema OTP
 async function verifyAdminSession(sessionCookie: string) {
     try {
-        const decodedClaims = await getAuth().verifySessionCookie(sessionCookie, true);
-        const uid = decodedClaims.uid;
+        // Decodificar la cookie base64
+        const sessionData = JSON.parse(Buffer.from(sessionCookie, 'base64').toString('utf-8'));
         
-        console.log('🔍 Verificando admin para UID:', uid);
+        console.log('🔍 Session data:', sessionData);
         
-        // Método 1: Buscar por ID de documento directo (admins antiguos)
-        const adminDocByUid = await adminDb.collection('admins').doc(uid).get();
-        if (adminDocByUid.exists) {
-            console.log('✅ Admin encontrado por UID como ID del documento');
-            return decodedClaims;
+        // Verificar que la sesión no haya expirado
+        const now = Date.now();
+        if (now > sessionData.expiresAt) {
+            console.log('❌ Sesión expirada');
+            return null;
         }
         
-        // Método 2: Buscar por campo firebaseUid (admins nuevos con AdminOTAccount)
-        const adminQuery = await adminDb.collection('admins')
-            .where('firebaseUid', '==', uid)
-            .limit(1)
-            .get();
-        
-        if (!adminQuery.empty) {
-            console.log('✅ Admin encontrado por campo firebaseUid');
-            return decodedClaims;
+        // Verificar que sea un admin
+        if (!sessionData.admin) {
+            console.log('❌ No es un admin');
+            return null;
         }
         
-        // Método 3: Buscar por correo (fallback de seguridad)
-        if (decodedClaims.email) {
-            const adminByEmail = await adminDb.collection('admins')
-                .where('correo', '==', decodedClaims.email)
-                .limit(1)
-                .get();
-            
-            if (!adminByEmail.empty) {
-                console.log('✅ Admin encontrado por correo');
-                return decodedClaims;
-            }
+        // Verificar que el admin existe en Firestore
+        const adminDoc = await adminDb.collection('admins').doc(sessionData.uid).get();
+        
+        if (!adminDoc.exists) {
+            console.log('❌ Admin no encontrado en Firestore');
+            return null;
         }
         
-        console.log('❌ Usuario no es admin');
-        return null;
+        const adminData = adminDoc.data();
+        console.log('✅ Admin verificado:', adminData?.correo);
+        
+        return {
+            uid: sessionData.uid,
+            email: adminData?.correo,
+            admin: true
+        };
+        
     } catch (error) {
         console.error('❌ Error en verifyAdminSession:', error);
         return null;
@@ -126,44 +123,25 @@ export async function POST(request: Request) {
 
         console.log('🔑 Generando credenciales:', { adminOTAccount, email });
 
-        // 4. --- Crear usuario en Firebase Auth ---
-        let userRecord;
-        try {
-            userRecord = await getAuth().createUser({
-                email: email,
-                password: temporaryPassword,
-                emailVerified: false,
-                displayName: `Admin ${adminOTAccount}`,
-            });
-            console.log('✅ Usuario creado en Firebase Auth:', userRecord.uid);
-        } catch (authError: any) {
-            if (authError.code === 'auth/email-already-exists') {
-                return NextResponse.json({ 
-                    message: `El correo "${email}" ya está en uso en el sistema de autenticación.` 
-                }, { status: 409 });
-            }
-            throw authError;
-        }
-
-        // 5. --- Crear documento en Firestore con el AdminOTAccount como ID ---
+        // 4. --- Crear documento en Firestore con el AdminOTAccount como ID ---
+        // NOTA: Ya no necesitamos crear usuario en Firebase Auth
+        // porque usas sistema OTP propio
         await adminDb.collection('admins').doc(adminOTAccount).set({
             correo: email,
             fechaCreacion: Timestamp.now(),
             rol: 'admin',
-            fotoPerfil: '',
-            firebaseUid: userRecord.uid, // Guardamos referencia al UID de Firebase Auth
+            fotoPerfil: ''
         });
 
         console.log('✅ Documento creado en Firestore:', adminOTAccount);
 
-        // 6. --- Enviar credenciales por email ---
+        // 5. --- Enviar credenciales por email ---
         try {
             await sendAdminCredentials(email, adminOTAccount, temporaryPassword);
             console.log('✅ Email enviado a:', email);
         } catch (emailError) {
             console.error('❌ Error al enviar email:', emailError);
-            // Si falla el email, eliminamos el usuario creado
-            await getAuth().deleteUser(userRecord.uid);
+            // Si falla el email, eliminamos el admin creado
             await adminDb.collection('admins').doc(adminOTAccount).delete();
             
             return NextResponse.json({ 
