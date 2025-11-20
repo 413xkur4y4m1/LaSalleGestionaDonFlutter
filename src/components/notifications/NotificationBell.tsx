@@ -1,11 +1,10 @@
-
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
-import { Bell } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Bell, ExternalLink } from 'lucide-react';
 import { useSession } from 'next-auth/react';
-import { getNotifications, NotificacionData, markNotificationAsRead } from '@/lib/firestore-operations';
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,80 +13,208 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { doc, onSnapshot, collection, query, orderBy, limit } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, updateDoc, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase-config';
+
+interface NotificationData {
+  id: string;
+  tipo: 'vencimiento' | 'recordatorio' | 'formulario' | 'general';
+  prestamoId?: string;
+  mensaje: string;
+  formUrl?: string;
+  enviado: boolean;
+  fechaEnvio: any; // Timestamp de Firebase
+  canal: string;
+  leida: boolean; // ⚠️ Nota: los cron usan "leida" (femenino)
+}
+
+// Función para formatear tiempo relativo
+function getRelativeTime(timestamp: any): string {
+  if (!timestamp?.toDate) return 'Ahora';
+  
+  const date = timestamp.toDate();
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return 'Hace unos segundos';
+  if (diffInSeconds < 3600) return `Hace ${Math.floor(diffInSeconds / 60)} min`;
+  if (diffInSeconds < 86400) return `Hace ${Math.floor(diffInSeconds / 3600)} h`;
+  if (diffInSeconds < 604800) return `Hace ${Math.floor(diffInSeconds / 86400)} días`;
+  return date.toLocaleDateString('es-MX', { month: 'short', day: 'numeric' });
+}
 
 export function NotificationBell() {
   const { data: session } = useSession();
-  const [notifications, setNotifications] = useState<NotificacionData[]>([]);
+  const [notifications, setNotifications] = useState<NotificationData[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [isOpen, setIsOpen] = useState(false);
 
+  // ============================================
+  // LISTENER EN TIEMPO REAL
+  // ============================================
   useEffect(() => {
     if (!session?.user?.id) return;
 
-    const notificationsRef = collection(db, "Estudiantes", session.user.id, "Notificaciones");
-    const q = query(notificationsRef, orderBy("createdAt", "desc"), limit(10));
+    const notificationsRef = collection(
+      db, 
+      "Estudiantes", 
+      session.user.id, 
+      "Notificaciones"
+    );
+    
+    const q = query(
+      notificationsRef, 
+      orderBy("fechaEnvio", "desc"), 
+      limit(20)
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userNotifications = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as NotificacionData));
+      const userNotifications = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as NotificationData));
+
       setNotifications(userNotifications);
-      setUnreadCount(userNotifications.filter(n => !n.leido).length);
+      setUnreadCount(userNotifications.filter(n => !n.leida).length);
     });
 
-    // Cleanup subscription on component unmount
     return () => unsubscribe();
-  }, [session]);
+  }, [session?.user?.id]);
 
+  // ============================================
+  // MARCAR TODAS COMO LEÍDAS AL ABRIR
+  // ============================================
   const handleOpenChange = async (open: boolean) => {
-    // When the dropdown closes, mark visible unread notifications as read
+    setIsOpen(open);
+
+    // Al cerrar el dropdown, marcar todas como leídas
     if (!open && unreadCount > 0 && session?.user?.id) {
-      const unreadIds = notifications
-        .filter(n => !n.leido)
-        .map(n => n.id!);
+      const unreadNotifications = notifications.filter(n => !n.leida);
       
-      if (unreadIds.length > 0) {
-        // We create a "bulk" update by calling markAsRead for each one
-        await Promise.all(
-            unreadIds.map(id => markNotificationAsRead(session.user!.id, id))
+      const updatePromises = unreadNotifications.map(notification => {
+        const notifRef = doc(
+          db,
+          "Estudiantes",
+          session.user!.id,
+          "Notificaciones",
+          notification.id
         );
-        // The real-time listener will automatically update the state, so no need to refetch.
+        return updateDoc(notifRef, { leida: true });
+      });
+
+      try {
+        await Promise.all(updatePromises);
+      } catch (error) {
+        console.error('Error al marcar notificaciones como leídas:', error);
       }
     }
   };
 
+  // ============================================
+  // RENDERIZAR ICONO SEGÚN TIPO
+  // ============================================
+  const getNotificationIcon = (tipo: string) => {
+    switch (tipo) {
+      case 'vencimiento':
+        return '⚠️';
+      case 'recordatorio':
+        return '⏰';
+      case 'formulario':
+        return '📋';
+      default:
+        return '🔔';
+    }
+  };
+
+  // ============================================
+  // MANEJAR CLICK EN NOTIFICACIÓN
+  // ============================================
+  const handleNotificationClick = (notification: NotificationData) => {
+    // Si tiene formUrl, abrir en nueva pestaña
+    if (notification.formUrl) {
+      window.open(notification.formUrl, '_blank');
+    }
+  };
+
   return (
-    <DropdownMenu onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger className="relative outline-none ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-full p-2">
-        {/* Corregido: Se cambió text-white a un color visible sobre fondo blanco */}
-        <Bell className="h-6 w-6 text-gray-600 hover:text-gray-900" aria-label="Notificaciones" />
-        {unreadCount > 0 && (
-          <Badge
-            variant="destructive"
-            className="absolute top-0 right-0 h-5 w-5 justify-center p-0 transform-gpu animate-in fade-in-0 zoom-in-50"
-            aria-label={`${unreadCount} notificaciones no leídas`}
-          >
-            {unreadCount}
-          </Badge>
-        )}
+    <DropdownMenu open={isOpen} onOpenChange={handleOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label="Notificaciones"
+        >
+          <Bell className="h-5 w-5" />
+          {unreadCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+            >
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </Badge>
+          )}
+        </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-80 md:w-96" align="end">
-        <DropdownMenuLabel>Notificaciones</DropdownMenuLabel>
+
+      <DropdownMenuContent 
+        className="w-80 md:w-96 max-h-[500px] overflow-y-auto" 
+        align="end"
+      >
+        <DropdownMenuLabel className="flex items-center justify-between">
+          <span>Notificaciones</span>
+          {unreadCount > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {unreadCount} sin leer
+            </span>
+          )}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
+
         {notifications.length > 0 ? (
-          notifications.slice(0, 5).map(notification => (
-            <DropdownMenuItem key={notification.id} className="flex flex-col items-start gap-1 whitespace-normal">
-              <p className={`text-sm font-medium ${!notification.leido ? 'text-foreground font-bold' : 'text-muted-foreground'}`}>
-                {notification.mensaje}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {notification.createdAt ? formatDistanceToNow(notification.createdAt.toDate(), { addSuffix: true, locale: es }) : ''}
-              </p>
-            </DropdownMenuItem>
-          ))
+          <>
+            {notifications.map(notification => (
+              <DropdownMenuItem
+                key={notification.id}
+                className={`flex flex-col items-start gap-2 p-3 cursor-pointer ${
+                  !notification.leida ? 'bg-accent/50' : ''
+                }`}
+                onClick={() => handleNotificationClick(notification)}
+              >
+                <div className="flex items-start gap-2 w-full">
+                  <span className="text-lg shrink-0 mt-0.5">
+                    {getNotificationIcon(notification.tipo)}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm ${
+                      !notification.leida ? 'font-semibold' : 'font-normal'
+                    }`}>
+                      {notification.mensaje}
+                    </p>
+                    {notification.formUrl && (
+                      <div className="flex items-center gap-1 text-xs text-blue-600 mt-1">
+                        <ExternalLink className="h-3 w-3" />
+                        <span>Abrir formulario</span>
+                      </div>
+                    )}
+                  </div>
+                  {!notification.leida && (
+                    <div className="w-2 h-2 bg-blue-600 rounded-full shrink-0 mt-2" />
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground pl-7">
+                  {getRelativeTime(notification.fechaEnvio)}
+                </p>
+              </DropdownMenuItem>
+            ))}
+          </>
         ) : (
-          <p className="p-4 text-sm text-center text-muted-foreground">No tienes notificaciones</p>
+          <div className="p-8 text-center">
+            <Bell className="h-12 w-12 mx-auto text-muted-foreground/30 mb-2" />
+            <p className="text-sm text-muted-foreground">
+              No tienes notificaciones
+            </p>
+          </div>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
