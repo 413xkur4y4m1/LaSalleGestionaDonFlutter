@@ -1,28 +1,63 @@
-
 'use server';
 
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { getDb, getRtdb } from '@/lib/firestore-operations-server';
-import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
-// --- Función de Verificación de Admin ---
+// --- Función de Verificación de Admin (ACTUALIZADA PARA OTP) ---
 async function verifyAdminSession(sessionCookie: string) {
     const db = getDb();
     try {
-        const decodedClaims = await getAuth().verifySessionCookie(sessionCookie, true);
-        const adminDocRef = db.collection('admins').doc(decodedClaims.uid);
+        // Decodificar la cookie de sesión
+        const sessionData = JSON.parse(Buffer.from(sessionCookie, 'base64').toString('utf-8'));
+        
+        // Verificar que no haya expirado
+        const now = Date.now();
+        if (now > sessionData.expiresAt) {
+            console.error("La sesión ha expirado");
+            return null;
+        }
+
+        // Verificar que sea una sesión de admin
+        if (!sessionData.admin || !sessionData.uid) {
+            console.error("La sesión no tiene permisos de administrador");
+            return null;
+        }
+
+        // Verificar que el admin existe en Firestore
+        const adminDocRef = db.collection('admins').doc(sessionData.uid);
         const adminDoc = await adminDocRef.get();
-        return adminDoc.exists ? decodedClaims : null;
+        
+        if (!adminDoc.exists) {
+            console.error("Admin no encontrado en la base de datos");
+            return null;
+        }
+
+        // Retornar datos de la sesión
+        return {
+            uid: sessionData.uid,
+            admin: true
+        };
     } catch (error) {
         console.error("Error verificando la sesión de admin:", error);
         return null;
     }
 }
 
-// --- ACCIÓN: Obtener Detalles del Préstamo (CORREGIDA) ---
+// --- ACCIÓN: Obtener Detalles del Préstamo (CON AUTENTICACIÓN) ---
 export async function getPrestamoDetailsAction(codigo: string) {
+    // Verificación de sesión de admin
+    const sessionCookie = (await cookies()).get('__session')?.value;
+    if (!sessionCookie) {
+        return { success: false, message: 'No autorizado: No hay sesión activa.' };
+    }
+    
+    const adminClaims = await verifyAdminSession(sessionCookie);
+    if (!adminClaims) {
+        return { success: false, message: 'No autorizado: Debes ser administrador para escanear códigos QR.' };
+    }
+
     const db = getDb();
     try {
         const qrDocRef = db.collection('qrs').doc(codigo);
@@ -48,7 +83,7 @@ export async function getPrestamoDetailsAction(codigo: string) {
             return { success: false, message: 'El documento del préstamo está vacío.' };
         }
 
-        // ✅ CORRECCIÓN: Buscar en la colección 'Estudiantes' y usar el campo 'nombre'
+        // Buscar en la colección 'Estudiantes' y usar el campo 'nombre'
         const studentRef = db.collection('Estudiantes').doc(qrData.studentUid);
         const studentDoc = await studentRef.get();
         const studentName = studentDoc.exists ? studentDoc.data()?.nombre : 'Estudiante Desconocido';
@@ -72,7 +107,7 @@ export async function getPrestamoDetailsAction(codigo: string) {
 }
 
 
-// --- ACCIÓN: Activar Préstamo (COMPLETA Y CORREGIDA) ---
+// --- ACCIÓN: Activar Préstamo ---
 export async function activatePrestamoAction(codigo: string) {
     const sessionCookie = (await cookies()).get('__session')?.value;
     if (!sessionCookie) {
@@ -118,7 +153,7 @@ export async function activatePrestamoAction(codigo: string) {
              return { success: false, message: 'El préstamo no tiene un materialId o cantidad válida para ser procesado.' };
         }
 
-        // 3. ✅ LÓGICA DE INVENTARIO: Verificar y actualizar el stock en la Realtime Database
+        // 3. Verificar y actualizar el stock en la Realtime Database
         const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
         
         const { committed, snapshot } = await materialRtdbRef.transaction((currentData) => {
@@ -137,7 +172,7 @@ export async function activatePrestamoAction(codigo: string) {
             return { success: false, message: `Stock insuficiente. Disponible: ${currentStock}, Solicitado: ${cantidad}. No se pudo activar el préstamo.` };
         }
 
-        // 4. ✅ Si la transacción de stock fue exitosa, actualizamos los documentos en Firestore
+        // 4. Si la transacción de stock fue exitosa, actualizamos los documentos en Firestore
         await db.runTransaction(async (transaction) => {
             transaction.update(prestamoRef, { 
                 estado: 'activo', 

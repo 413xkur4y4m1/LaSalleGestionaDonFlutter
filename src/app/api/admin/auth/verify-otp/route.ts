@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp } from 'firebase-admin/firestore';
 
 /**
- * Verifica un código OTP y, si es válido, lo marca como usado.
- * Esta versión simplifica la consulta a Firestore para evitar requerir un índice compuesto.
+ * Verifica un código OTP y crea una sesión de administrador.
  */
 export async function POST(request: Request) {
     console.log("API /api/admin/auth/verify-otp HIT!");
@@ -18,7 +18,6 @@ export async function POST(request: Request) {
         }
 
         // 1. Consulta simplificada: busca solo por adminId y otp.
-        // Esto evita el error FAILED_PRECONDITION que requiere un índice compuesto.
         const otpQuery = adminDb.collection('admin_auth_codes')
             .where('adminId', '==', adminId)
             .where('otp', '==', otp)
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
         const otpData = otpDoc.data();
         const now = Timestamp.now();
 
-        // 2. Verificación de las condiciones en el código de la API, no en la consulta.
+        // 2. Verificación de las condiciones en el código de la API.
         if (otpData.used) {
             console.log(`Verification failed for admin '${adminId}'. OTP '${otp}' was already used.`);
             return NextResponse.json({ message: "Este código ya fue utilizado." }, { status: 401 });
@@ -46,16 +45,35 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "El código ha expirado." }, { status: 401 });
         }
 
-        // 3. Si todas las condiciones pasan, marcamos el código como usado.
+        // 3. Marcar el código como usado.
         await otpDoc.ref.update({ used: true });
         
         console.log(`Verification successful for admin '${adminId}'. OTP document ${otpDoc.id} has been marked as used.`);
 
-        // 4. Simulación de creación de sesión.
-        // En una app real, aquí se crearía un JWT o una cookie.
+        // 4. ✅ NUEVO: Crear cookie de sesión segura
+        const nowMillis = Date.now();
+        const sessionData = {
+            uid: adminId,
+            admin: true,
+            createdAt: nowMillis,
+            expiresAt: nowMillis + (5 * 24 * 60 * 60 * 1000) // 5 días
+        };
+
+        const cookieStore = await cookies();
+        cookieStore.set('__session', Buffer.from(JSON.stringify(sessionData)).toString('base64'), {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 5 * 24 * 60 * 60, // 5 días en segundos
+            path: '/'
+        });
+
+        console.log(`Session cookie created for admin '${adminId}'`);
+
         return NextResponse.json({ 
+            success: true,
             message: "¡Acceso concedido! Bienvenido.",
-            redirectUrl: '/admin/dashboard' // URL a la que redirigir en el frontend
+            redirectUrl: '/admin/dashboard'
         });
 
     } catch (error) {
