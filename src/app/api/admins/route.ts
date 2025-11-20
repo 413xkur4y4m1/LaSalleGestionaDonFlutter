@@ -7,16 +7,49 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { sendAdminCredentials } from '@/lib/emailService'; 
 import { randomBytes } from 'crypto';
 
-// Función de verificación de admin
+// Función de verificación de admin (CORREGIDA)
 async function verifyAdminSession(sessionCookie: string) {
     try {
         const decodedClaims = await getAuth().verifySessionCookie(sessionCookie, true);
-        const adminDoc = await adminDb.collection('admins').doc(decodedClaims.uid).get();
-        if (adminDoc.exists) {
+        const uid = decodedClaims.uid;
+        
+        console.log('🔍 Verificando admin para UID:', uid);
+        
+        // Método 1: Buscar por ID de documento directo (admins antiguos)
+        const adminDocByUid = await adminDb.collection('admins').doc(uid).get();
+        if (adminDocByUid.exists) {
+            console.log('✅ Admin encontrado por UID como ID del documento');
             return decodedClaims;
         }
+        
+        // Método 2: Buscar por campo firebaseUid (admins nuevos con AdminOTAccount)
+        const adminQuery = await adminDb.collection('admins')
+            .where('firebaseUid', '==', uid)
+            .limit(1)
+            .get();
+        
+        if (!adminQuery.empty) {
+            console.log('✅ Admin encontrado por campo firebaseUid');
+            return decodedClaims;
+        }
+        
+        // Método 3: Buscar por correo (fallback de seguridad)
+        if (decodedClaims.email) {
+            const adminByEmail = await adminDb.collection('admins')
+                .where('correo', '==', decodedClaims.email)
+                .limit(1)
+                .get();
+            
+            if (!adminByEmail.empty) {
+                console.log('✅ Admin encontrado por correo');
+                return decodedClaims;
+            }
+        }
+        
+        console.log('❌ Usuario no es admin');
         return null;
     } catch (error) {
+        console.error('❌ Error en verifyAdminSession:', error);
         return null;
     }
 }
@@ -38,6 +71,8 @@ export async function POST(request: Request) {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get('__session')?.value;
 
+    console.log('🔍 SessionCookie:', sessionCookie ? 'Existe' : 'NO EXISTE');
+
     if (!sessionCookie) {
         return NextResponse.json({ 
             message: "No autorizado: Sesión no proporcionada." 
@@ -51,6 +86,8 @@ export async function POST(request: Request) {
             message: "No autorizado: Solo un administrador puede realizar esta acción." 
         }, { status: 403 });
     }
+
+    console.log('✅ Admin verificado:', adminClaims.email);
 
     try {
         const body = await request.json();
@@ -87,6 +124,8 @@ export async function POST(request: Request) {
         const adminOTAccount = generateAdminOTAccount();
         const temporaryPassword = generateTemporaryPassword();
 
+        console.log('🔑 Generando credenciales:', { adminOTAccount, email });
+
         // 4. --- Crear usuario en Firebase Auth ---
         let userRecord;
         try {
@@ -96,6 +135,7 @@ export async function POST(request: Request) {
                 emailVerified: false,
                 displayName: `Admin ${adminOTAccount}`,
             });
+            console.log('✅ Usuario creado en Firebase Auth:', userRecord.uid);
         } catch (authError: any) {
             if (authError.code === 'auth/email-already-exists') {
                 return NextResponse.json({ 
@@ -114,11 +154,14 @@ export async function POST(request: Request) {
             firebaseUid: userRecord.uid, // Guardamos referencia al UID de Firebase Auth
         });
 
+        console.log('✅ Documento creado en Firestore:', adminOTAccount);
+
         // 6. --- Enviar credenciales por email ---
         try {
             await sendAdminCredentials(email, adminOTAccount, temporaryPassword);
+            console.log('✅ Email enviado a:', email);
         } catch (emailError) {
-            console.error('Error al enviar email:', emailError);
+            console.error('❌ Error al enviar email:', emailError);
             // Si falla el email, eliminamos el usuario creado
             await getAuth().deleteUser(userRecord.uid);
             await adminDb.collection('admins').doc(adminOTAccount).delete();
@@ -128,7 +171,7 @@ export async function POST(request: Request) {
             }, { status: 500 });
         }
 
-        console.log(`Nuevo admin creado: ${adminOTAccount} (${email}) por ${adminClaims.email}`);
+        console.log(`✅ Nuevo admin creado: ${adminOTAccount} (${email}) por ${adminClaims.email}`);
 
         return NextResponse.json({ 
             message: `¡Administrador creado exitosamente! Se han enviado las credenciales a ${email}`,
@@ -136,7 +179,7 @@ export async function POST(request: Request) {
         });
 
     } catch (error: any) {
-        console.error("Error fatal en /api/admins:", error);
+        console.error("❌ Error fatal en /api/admins:", error);
         return NextResponse.json({ 
             message: "Error interno del servidor al procesar la solicitud." 
         }, { status: 500 });
