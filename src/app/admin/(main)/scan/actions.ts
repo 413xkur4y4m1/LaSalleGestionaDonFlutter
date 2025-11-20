@@ -149,6 +149,12 @@ export async function activatePrestamoAction(codigo: string) {
 
         const prestamoData = prestamoDoc.data();
         const { materialId, cantidad } = prestamoData || {};
+        
+        console.log('=== DEBUG PRÉSTAMO ===');
+        console.log('Préstamo Data:', prestamoData);
+        console.log('Material ID:', materialId);
+        console.log('Cantidad solicitada:', cantidad);
+        
         if (!materialId || !cantidad) {
              return { success: false, message: 'El préstamo no tiene un materialId o cantidad válida para ser procesado.' };
         }
@@ -157,18 +163,23 @@ export async function activatePrestamoAction(codigo: string) {
         const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
         
         const { committed, snapshot } = await materialRtdbRef.transaction((currentData) => {
-            if (currentData === null) { return; }
-            const currentStock = currentData.stock || 0;
+            if (currentData === null) { 
+                console.log(`Material ${materialId} no existe en RTDB`);
+                return; 
+            }
+            const currentStock = currentData.cantidad || 0;
+            console.log(`Stock actual de ${materialId}: ${currentStock}, Solicitado: ${cantidad}`);
             if (currentStock >= cantidad) {
-                currentData.stock = currentStock - cantidad;
+                currentData.cantidad = currentStock - cantidad;
                 return currentData;
             } else {
+                console.log(`Stock insuficiente: ${currentStock} < ${cantidad}`);
                 return;
             }
         });
 
         if (!committed) {
-            const currentStock = (await materialRtdbRef.once('value')).val()?.stock || 0;
+            const currentStock = (await materialRtdbRef.once('value')).val()?.cantidad || 0;
             return { success: false, message: `Stock insuficiente. Disponible: ${currentStock}, Solicitado: ${cantidad}. No se pudo activar el préstamo.` };
         }
 
@@ -185,7 +196,7 @@ export async function activatePrestamoAction(codigo: string) {
             });
         });
 
-        const newStock = snapshot.val()?.stock;
+        const newStock = snapshot.val()?.cantidad;
         console.log(`Préstamo ${codigo} activado por ${adminClaims.uid}. Stock de ${materialId} actualizado a ${newStock}.`);
         
         revalidatePath('/admin/scan');
