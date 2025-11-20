@@ -7,7 +7,7 @@ import { getDb, getRtdb } from '@/lib/firestore-operations-server';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue } from 'firebase-admin/firestore';
 
-// --- Función de Verificación de Admin (Sin Cambios) ---
+// --- Función de Verificación de Admin ---
 async function verifyAdminSession(sessionCookie: string) {
     const db = getDb();
     try {
@@ -21,7 +21,7 @@ async function verifyAdminSession(sessionCookie: string) {
     }
 }
 
-// --- ACCIÓN: Obtener Detalles del Préstamo ---
+// --- ACCIÓN: Obtener Detalles del Préstamo (CORREGIDA) ---
 export async function getPrestamoDetailsAction(codigo: string) {
     const db = getDb();
     try {
@@ -48,10 +48,10 @@ export async function getPrestamoDetailsAction(codigo: string) {
             return { success: false, message: 'El documento del préstamo está vacío.' };
         }
 
-        const userRef = db.collection('users').doc(qrData.studentUid);
-        const userDoc = await userRef.get();
-        // CORRECCIÓN: Cambiado de userDoc.exists() a userDoc.exists
-        const studentName = userDoc.exists ? userDoc.data()?.name : 'Estudiante Desconocido';
+        // ✅ CORRECCIÓN: Buscar en la colección 'Estudiantes' y usar el campo 'nombre'
+        const studentRef = db.collection('Estudiantes').doc(qrData.studentUid);
+        const studentDoc = await studentRef.get();
+        const studentName = studentDoc.exists ? studentDoc.data()?.nombre : 'Estudiante Desconocido';
 
         const details = {
             id: prestamoDoc.id,
@@ -72,7 +72,7 @@ export async function getPrestamoDetailsAction(codigo: string) {
 }
 
 
-// --- Acción para Activar el Préstamo (Sin Cambios) ---
+// --- ACCIÓN: Activar Préstamo (COMPLETA Y CORREGIDA) ---
 export async function activatePrestamoAction(codigo: string) {
     const sessionCookie = (await cookies()).get('__session')?.value;
     if (!sessionCookie) {
@@ -87,6 +87,7 @@ export async function activatePrestamoAction(codigo: string) {
     const rtdb = getRtdb();
 
     try {
+        // 1. Obtener datos del QR
         const qrDocRef = db.collection('qrs').doc(codigo);
         const qrDoc = await qrDocRef.get();
 
@@ -96,13 +97,14 @@ export async function activatePrestamoAction(codigo: string) {
 
         const qrData = qrDoc.data();
         if (qrData?.status !== 'pendiente') {
-            return { success: false, message: `Este QR ya fue procesado. Estado: ${qrData?.status}.` };
+            return { success: false, message: `Este QR ya fue procesado. Estado actual: ${qrData?.status}.` };
         }
 
-        if (qrData.operationType !== 'prestamos') {
-            return { success: false, message: `Este QR no es para una operación de préstamo.` };
+        if (qrData.operationType !== 'prestamos' || !qrData.studentUid || !qrData.operationId) {
+            return { success: false, message: `Este QR no es para una operación de préstamo válida.` };
         }
 
+        // 2. Obtener datos del Préstamo original
         const prestamoRef = db.collection('Estudiantes').doc(qrData.studentUid).collection('Prestamos').doc(qrData.operationId);
         const prestamoDoc = await prestamoRef.get();
 
@@ -112,32 +114,53 @@ export async function activatePrestamoAction(codigo: string) {
 
         const prestamoData = prestamoDoc.data();
         const { materialId, cantidad } = prestamoData || {};
-        if (!materialId) {
-             return { success: false, message: 'El préstamo no tiene un materialId asociado.' };
+        if (!materialId || !cantidad) {
+             return { success: false, message: 'El préstamo no tiene un materialId o cantidad válida para ser procesado.' };
         }
 
+        // 3. ✅ LÓGICA DE INVENTARIO: Verificar y actualizar el stock en la Realtime Database
         const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
-        const materialSnapshot = await materialRtdbRef.once('value');
-        const currentStock = materialSnapshot.val()?.cantidad || 0;
-
-        if (currentStock < cantidad) {
-            return { success: false, message: `Stock insuficiente. Disponible: ${currentStock}, Solicitado: ${cantidad}` };
-        }
-
-        await db.runTransaction(async (transaction) => {
-            transaction.update(prestamoRef, { estado: 'activo', fechaInicio: FieldValue.serverTimestamp() });
-            transaction.update(qrDocRef, { status: 'validado', validatedBy: adminClaims.uid, validatedAt: FieldValue.serverTimestamp() });
+        
+        const { committed, snapshot } = await materialRtdbRef.transaction((currentData) => {
+            if (currentData === null) { return; }
+            const currentStock = currentData.stock || 0;
+            if (currentStock >= cantidad) {
+                currentData.stock = currentStock - cantidad;
+                return currentData;
+            } else {
+                return;
+            }
         });
 
-        const newStock = currentStock - cantidad;
-        await materialRtdbRef.update({ cantidad: newStock });
+        if (!committed) {
+            const currentStock = (await materialRtdbRef.once('value')).val()?.stock || 0;
+            return { success: false, message: `Stock insuficiente. Disponible: ${currentStock}, Solicitado: ${cantidad}. No se pudo activar el préstamo.` };
+        }
 
+        // 4. ✅ Si la transacción de stock fue exitosa, actualizamos los documentos en Firestore
+        await db.runTransaction(async (transaction) => {
+            transaction.update(prestamoRef, { 
+                estado: 'activo', 
+                fechaInicio: FieldValue.serverTimestamp() 
+            });
+            transaction.update(qrDocRef, { 
+                status: 'validado', 
+                validatedBy: adminClaims.uid, 
+                validatedAt: FieldValue.serverTimestamp() 
+            });
+        });
+
+        const newStock = snapshot.val()?.stock;
         console.log(`Préstamo ${codigo} activado por ${adminClaims.uid}. Stock de ${materialId} actualizado a ${newStock}.`);
+        
         revalidatePath('/admin/scan');
         return { success: true, message: '¡Préstamo activado con éxito!' };
 
     } catch (error: any) {
         console.error("Error en activatePrestamoAction:", error);
+        if (error.code && error.message) {
+            return { success: false, message: `Error de base de datos: ${error.message}` };
+        }
         return { success: false, message: error.message || 'Error interno del servidor.' };
     }
 }

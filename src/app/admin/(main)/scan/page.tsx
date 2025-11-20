@@ -1,188 +1,201 @@
-
 'use client';
 
-import { useState, useEffect, Suspense, useTransition } from 'react';
-import { useSearchParams } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { LoaderCircle, CheckCircle, XCircle, ScanLine } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-
-// PASO 1: Importar AMBAS Server Actions
+import { useToast } from '@/hooks/use-toast';
 import { getPrestamoDetailsAction, activatePrestamoAction } from './actions';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { LoaderCircle, CheckCircle, XCircle, User, Box, Calendar, Hash, ShieldCheck, ScanLine, RotateCw } from 'lucide-react';
 
-// --- Tipos de Datos (sin cambios) ---
-interface PrestamoDetails {
-    id: string;
-    loanCode: string;
-    studentName: string;
-    materialNombre: string;
-    cantidad: number;
-    estado: 'pendiente' | 'activo' | 'devuelto' | 'con adeudo';
-    fechaSolicitud: string;
-}
-
-// --- Componente de la Tarjeta de Información (sin cambios) ---
-const PrestamoInfoCard = ({ details, onActivate, isLoading }: { details: PrestamoDetails, onActivate: () => void, isLoading: boolean }) => {
-    const estadoMap = {
-        pendiente: { text: 'Pendiente de Entrega', color: 'bg-yellow-500' },
-        activo: { text: 'Activo', color: 'bg-green-500' },
-        devuelto: { text: 'Devuelto', color: 'bg-blue-500' },
-        'con adeudo': { text: 'Con Adeudo', color: 'bg-red-500' },
-    };
-    const { text, color } = estadoMap[details.estado] || { text: 'Desconocido', color: 'bg-gray-500' };
-    return (
-        <Card className="w-full max-w-lg mx-auto">
-            <CardHeader>
-                <CardTitle className="text-center text-2xl">Detalles del Préstamo</CardTitle>
-                <CardDescription className="text-center font-mono text-lg">{details.loanCode}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="flex justify-between items-center"><span>Estudiante:</span> <span className="font-semibold">{details.studentName}</span></div>
-                <div className="flex justify-between items-center"><span>Material:</span> <span className="font-semibold">{details.materialNombre}</span></div>
-                <div className="flex justify-between items-center"><span>Cantidad:</span> <span className="font-semibold">{details.cantidad}</span></div>
-                <div className="flex justify-between items-center"><span>Solicitado:</span> <span className="font-semibold">{new Date(details.fechaSolicitud).toLocaleString('es-MX')}</span></div>
-                <div className="flex justify-between items-center"><span>Estado:</span> <Badge className={`${color} text-white`}>{text}</Badge></div>
-                {details.estado === 'pendiente' && (
-                    <Button onClick={onActivate} disabled={isLoading} className="w-full mt-4 bg-green-600 hover:bg-green-700 text-white font-bold py-3">
-                        {isLoading ? <LoaderCircle className="animate-spin" /> : <CheckCircle className="mr-2" />} 
-                        Confirmar y Activar Préstamo
-                    </Button>
-                )}
-                {details.estado !== 'pendiente' && (
-                     <div className="text-center mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg">
-                        <p className="font-medium text-blue-800">Este préstamo ya fue procesado y no requiere más acciones.</p>
-                    </div>
-                )}
-            </CardContent>
-        </Card>
-    );
+// --- Tipos ---
+type PrestamoDetails = {
+  id: string;
+  loanCode: string;
+  studentName: string;
+  materialNombre: string;
+  cantidad: number;
+  estado: string;
+  fechaSolicitud: string;
 };
 
+type ScanResult = { success: true; data: PrestamoDetails } | { success: false; message: string };
 
-// --- Componente Principal (LÓGICA TOTALMENTE RENOVADA) ---
-const ScanPageContent = () => {
-    const searchParams = useSearchParams();
-    // CORRECCIÓN: Añadido optional chaining (?.) para evitar el error si searchParams es null.
-    const initialCodeFromUrl = searchParams?.get('codigo');
+// --- Componente Principal ---
+const AdminScanPage = () => {
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isActivating, setIsActivating] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const { toast } = useToast();
 
-    const [scannedCode, setScannedCode] = useState<string | null>(null);
-    const [prestamo, setPrestamo] = useState<PrestamoDetails | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    
-    // Transiciones para manejar estados de carga de las Server Actions
-    const [isFetching, startFetching] = useTransition();
-    const [isActivating, startActivating] = useTransition();
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-    // PASO 1C: Función para extraer el código de una URL
-    const extractLoanCode = (data: string): string | null => {
-        if (data.startsWith('http')) {
-            try {
-                const url = new URL(data);
-                return url.searchParams.get('codigo');
-            } catch (e) {
-                return null; // URL inválida
-            }
+  const handleScanResult = async (detectedCodes: any[]) => {
+    if (detectedCodes && detectedCodes.length > 0 && !isLoading) {
+      const codigo = detectedCodes[0].rawValue;
+      if (codigo) {
+        setIsLoading(true);
+        setScanResult(null); // Limpia el resultado anterior
+        try {
+          const details = await getPrestamoDetailsAction(codigo);
+          // ✅ CORRECCIÓN: Type guard para asegurar el tipo correcto
+          if (details.success && details.data) {
+            setScanResult({ success: true, data: details.data });
+            toast({ title: 'Código escaneado', description: `Se encontraron detalles para el código ${codigo}.` });
+          } else {
+            setScanResult({ success: false, message: details.message || 'Error desconocido' });
+            toast({ variant: 'destructive', title: 'Error de escaneo', description: details.message || 'Error desconocido' });
+          }
+        } catch (e: any) {
+          const errorMessage = e.message || 'Ocurrió un error desconocido.';
+          setScanResult({ success: false, message: errorMessage });
+          toast({ variant: 'destructive', title: 'Error del Servidor', description: errorMessage });
+        } finally {
+          setIsLoading(false);
         }
-        return data; // Ya es un código
-    };
+      }
+    }
+  };
 
-    const handleCodeDetection = (codigo: string) => {
-        setError(null);
-        setPrestamo(null);
-        setScannedCode(codigo);
-
-        startFetching(async () => {
-            const result = await getPrestamoDetailsAction(codigo);
-            if (result.success && result.data) {
-                setPrestamo(result.data as PrestamoDetails);
-                toast.success(`Préstamo ${codigo} encontrado.`);
-            } else {
-                const errorMessage = result.message || 'Error desconocido al buscar el préstamo.';
-                setError(errorMessage);
-                toast.error(errorMessage);
+  const handleActivate = async () => {
+    if (scanResult && scanResult.success && scanResult.data.estado === 'pendiente') {
+      setIsActivating(true);
+      try {
+        // ✅ CORRECCIÓN: Llamar a la acción con el código correcto
+        const activationResult = await activatePrestamoAction(scanResult.data.loanCode);
+        if (activationResult.success) {
+          toast({ title: 'Éxito', description: activationResult.message, className: 'bg-green-100 border-green-400' });
+          // Actualizar el estado local para reflejar el cambio
+          setScanResult(prev => {
+            if (prev && prev.success) {
+              return { success: true, data: { ...prev.data, estado: 'activo' } };
             }
-        });
-    };
-
-    const handleActivate = () => {
-        if (!scannedCode) return;
-
-        startActivating(async () => {
-            const result = await activatePrestamoAction(scannedCode);
-            if (result.success) {
-                toast.success(result.message);
-                // Refrescamos los detalles para mostrar el nuevo estado 'activo'
-                handleCodeDetection(scannedCode);
-            } else {
-                const errorMessage = result.message || 'Error desconocido al activar.';
-                toast.error(errorMessage);
-            }
-        });
-    };
-
-    useEffect(() => {
-        if (initialCodeFromUrl) {
-            const extracted = extractLoanCode(initialCodeFromUrl);
-            if (extracted) {
-                handleCodeDetection(extracted);
-            }
-        }
-    }, [initialCodeFromUrl]);
-
-    const handleScanResult = (result: string) => {
-        if (!result) return;
-        const extracted = extractLoanCode(result);
-        if (extracted) {
-            handleCodeDetection(extracted);
+            return prev;
+          });
         } else {
-            toast.error('El código QR no contiene un código de préstamo válido.');
+          toast({ variant: 'destructive', title: 'Error de Activación', description: activationResult.message });
         }
-    };
+      } catch (e: any) {
+        const errorMessage = e.message || 'Error al activar el préstamo.';
+        toast({ variant: 'destructive', title: 'Error del Servidor', description: errorMessage });
+      } finally {
+        setIsActivating(false);
+      }
+    }
+  };
 
-    return (
-        <div className="container mx-auto p-4 md:p-8">
-            <h1 className="text-3xl font-bold text-center mb-2 text-gray-800">Escanear Código de Préstamo</h1>
-            <p className="text-center text-gray-500 mb-8">Apunta la cámara al código QR para ver y activar el préstamo.</p>
+  const handleReset = () => {
+    setScanResult(null);
+    setIsLoading(false);
+    setIsActivating(false);
+  };
 
-            {!scannedCode && (
-                <Card className="w-full max-w-md mx-auto overflow-hidden">
-                     <CardContent className="p-0 relative aspect-square">
-                        <div className="absolute inset-0">
-                             <Scanner 
-                                 onScan={(result) => handleScanResult(result[0]?.rawValue || '')}
-                                 constraints={{ facingMode: 'environment' }}
-                             />
-                         </div>
-                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                             <ScanLine className="text-white h-2/3 w-2/3 animate-pulse" strokeWidth={1} />
-                             <div className="absolute inset-0 border-4 border-white/50 rounded-lg"/>
-                         </div>
-                     </CardContent>
-                 </Card>
+  return (
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">Escanear Código QR de Préstamo</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center"><ScanLine className="mr-2" /> Escáner</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isClient ? (
+              <div className="w-full aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                 <Scanner
+                    onScan={handleScanResult}
+                    onError={(error: unknown) => console.log(error)}
+                    constraints={{ facingMode: 'environment' }}
+                    styles={{ container: { width: '100%', height: '100%' } }}
+                  />
+              </div>
+            ) : (
+              <div className="w-full aspect-square bg-gray-100 rounded-lg flex items-center justify-center">
+                <LoaderCircle className="animate-spin text-gray-400" />
+              </div>
             )}
+            <p className="text-sm text-center text-gray-500 mt-2">Apunta la cámara al código QR del estudiante.</p>
+          </CardContent>
+        </Card>
 
-            {isFetching && <div className="flex justify-center items-center p-8"><LoaderCircle className="animate-spin h-10 w-10 text-gray-600" /> <p className='ml-3'>Buscando préstamo...</p></div>}
-            {error && <div className="text-center text-red-500 font-bold p-8"><XCircle className="mx-auto h-8 w-8 mb-2"/> {error}</div>}
-            {prestamo && <PrestamoInfoCard details={prestamo} onActivate={handleActivate} isLoading={isActivating} />}
-
-            {(scannedCode || error) && (
-                <div className="text-center mt-8">
-                    <Button variant="outline" onClick={() => { setScannedCode(null); setPrestamo(null); setError(null); }}>
-                        Escanear Otro Código
-                    </Button>
-                </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Detalles de la Solicitud</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <LoaderCircle className="animate-spin text-primary h-12 w-12" />
+                <p className="mt-4 text-lg font-medium">Buscando...</p>
+              </div>
+            ) : scanResult && scanResult.success ? (
+              <LoanDetailsCard details={scanResult.data} onActivate={handleActivate} isActivating={isActivating} onReset={handleReset} />
+            ) : scanResult && !scanResult.success ? (
+              <ErrorCard message={scanResult.message} onReset={handleReset} />
+            ) : (
+               <div className="flex flex-col items-center justify-center h-64">
+                <p className="text-lg text-gray-500">Esperando escaneo...</p>
+              </div>
             )}
-        </div>
-    );
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
 };
 
-export default function ScanPage() {
-    return (
-        <Suspense fallback={<div className="flex justify-center items-center h-screen"><LoaderCircle className="animate-spin h-12 w-12"/></div>}>
-            <ScanPageContent />
-        </Suspense>
-    );
-}
+// --- Sub-componentes ---
+
+const LoanDetailsCard = ({ details, onActivate, isActivating, onReset }: { details: PrestamoDetails, onActivate: () => void, isActivating: boolean, onReset: () => void }) => (
+  <div>
+    <div className={`p-4 rounded-md mb-4 ${details.estado === 'pendiente' ? 'bg-yellow-100' : 'bg-green-100'}`}>
+      <h3 className={`font-bold text-lg flex items-center ${details.estado === 'pendiente' ? 'text-yellow-800' : 'text-green-800'}`}>
+        {details.estado === 'pendiente' ? <ShieldCheck className="mr-2" /> : <CheckCircle className="mr-2" />}
+        Estado: <span className="ml-1 font-mono uppercase">{details.estado}</span>
+      </h3>
+    </div>
+    <div className="space-y-3 text-sm">
+        <InfoRow icon={<Hash />} label="Código" value={details.loanCode} />
+        {/* ✅ CORRECCIÓN: Mostrar el studentName del estado */}
+        <InfoRow icon={<User />} label="Estudiante" value={details.studentName} />
+        <InfoRow icon={<Box />} label="Material" value={details.materialNombre} />
+        <InfoRow icon={<Hash />} label="Cantidad" value={String(details.cantidad)} />
+        <InfoRow icon={<Calendar />} label="Solicitado" value={new Date(details.fechaSolicitud).toLocaleString()} />
+    </div>
+    <CardFooter className="px-0 pt-6 flex flex-col sm:flex-row-reverse gap-2">
+       {details.estado === 'pendiente' && (
+          // ✅ CORRECCIÓN: Botón conectado a la función onActivate
+          <Button onClick={onActivate} disabled={isActivating} className="w-full sm:w-auto">
+            {isActivating ? <LoaderCircle className="animate-spin mr-2" /> : <CheckCircle className="mr-2"/>}
+            Confirmar y Activar Préstamo
+          </Button>
+        )}
+        <Button onClick={onReset} variant="outline" className="w-full sm:w-auto">
+            <RotateCw className="mr-2" />
+            Escanear Otro
+        </Button>
+    </CardFooter>
+  </div>
+);
+
+const ErrorCard = ({ message, onReset }: { message: string, onReset: () => void }) => (
+  <Alert variant="destructive">
+    <XCircle className="h-4 w-4" />
+    <AlertTitle>Error</AlertTitle>
+    <AlertDescription>{message}</AlertDescription>
+    <Button onClick={onReset} variant="secondary" className="mt-4">Volver a intentar</Button>
+  </Alert>
+);
+
+const InfoRow = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) => (
+    <div className="flex items-center">
+        <div className="text-gray-500 mr-2">{icon}</div>
+        <strong className="mr-2 text-gray-800">{label}:</strong>
+        <span className="font-mono text-gray-600">{value}</span>
+    </div>
+);
+
+export default AdminScanPage;
