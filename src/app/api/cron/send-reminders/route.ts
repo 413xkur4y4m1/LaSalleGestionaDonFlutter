@@ -3,7 +3,6 @@ import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
 
 export async function GET(request: NextRequest) {
-  // ✅ CORRECCIÓN: Header con mayúscula
   const authHeader = request.headers.get('Authorization');
   const cronSecret = process.env.CRON_SECRET;
 
@@ -14,7 +13,7 @@ export async function GET(request: NextRequest) {
   });
 
   if (!cronSecret) {
-    console.error('❌ CRON_SECRET no está configurado en las variables de entorno');
+    console.error('❌ CRON_SECRET no configurado');
     return NextResponse.json({ 
       message: "Error de configuración del servidor." 
     }, { status: 500 });
@@ -31,26 +30,33 @@ export async function GET(request: NextRequest) {
   
   const db = getDb();
   let remindersSentCount = 0;
+  let loansFoundCount = 0;
+  let duplicatesSkipped = 0;
+  let errors: string[] = [];
+  
   const now = new Date();
   const reminderWindow = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Próximas 24 horas
+
+  console.log(`⏰ Ventana de tiempo: ${now.toISOString()} hasta ${reminderWindow.toISOString()}`);
 
   try {
     const studentsSnapshot = await db.collection('Estudiantes').get();
     
     if (studentsSnapshot.empty) {
+      console.log("❌ No se encontraron estudiantes.");
       return NextResponse.json({ 
         message: "No se encontraron estudiantes." 
       });
     }
 
-    const reminderPromises = [];
+    console.log(`📊 Total de estudiantes: ${studentsSnapshot.size}`);
 
     for (const studentDoc of studentsSnapshot.docs) {
       const studentData = studentDoc.data();
       const loansRef = studentDoc.ref.collection('Prestamos');
       const notificationsRef = studentDoc.ref.collection('Notificaciones');
       
-      // 1. --- BUSCAMOS PRÉSTAMOS ACTIVOS QUE VENCEN PRONTO ---
+      // 1. BUSCAR PRÉSTAMOS ACTIVOS QUE VENCEN PRONTO
       const reminderQuery = loansRef
         .where('estado', '==', 'activo')
         .where('fechaDevolucion', '>=', now)
@@ -60,62 +66,86 @@ export async function GET(request: NextRequest) {
       
       if (loansSnapshot.empty) continue;
 
+      loansFoundCount += loansSnapshot.size;
       console.log(
         `[CRON | s-rem]: Estudiante ${studentData.nombre || studentDoc.id} tiene ${loansSnapshot.size} préstamos por vencer.`
       );
 
       for (const loanDoc of loansSnapshot.docs) {
-        const loanData = loanDoc.data();
-        const prestamoId = loanDoc.id;
+        try {
+          const loanData = loanDoc.data();
+          const prestamoId = loanDoc.id;
+          
+          // Mostrar fecha de vencimiento para debug
+          const fechaVencimiento = loanData.fechaDevolucion?.toDate();
+          console.log(
+            ` -> Préstamo ${prestamoId} (${loanData.nombreMaterial}) vence: ${fechaVencimiento?.toISOString() || 'N/A'}`
+          );
 
-        // 2. --- VERIFICAMOS QUE NO EXISTA UN RECORDATORIO PREVIO ---
-        const checkPromise = notificationsRef
-          .where('tipo', '==', 'recordatorio')
-          .where('prestamoId', '==', prestamoId)
-          .limit(1)
-          .get()
-          .then(existingNotifSnap => {
-            if (!existingNotifSnap.empty) {
-              console.log(
-                ` -> Recordatorio para préstamo ${prestamoId} ya fue enviado. Saltando.`
-              );
-              return; // Si ya existe, no hacemos nada
-            }
+          // 2. VERIFICAR QUE NO EXISTA UN RECORDATORIO PREVIO
+          const existingNotifSnap = await notificationsRef
+            .where('tipo', '==', 'recordatorio')
+            .where('prestamoId', '==', prestamoId)
+            .limit(1)
+            .get();
 
-            // 3. --- SI NO EXISTE, CREAMOS LA NUEVA NOTIFICACIÓN ---
+          if (!existingNotifSnap.empty) {
+            duplicatesSkipped++;
             console.log(
-              ` -> Preparando recordatorio para préstamo ${prestamoId} (${loanData.nombreMaterial}).`
+              ` -> ⏭️  Recordatorio ya enviado anteriormente. Saltando.`
             );
-            remindersSentCount++;
-            
-            return notificationsRef.add({
-              tipo: 'recordatorio',
-              prestamoId: prestamoId,
-              mensaje: `⏰ RECORDATORIO: Tu préstamo de ${loanData.nombreMaterial || 'material'} vence pronto. Por favor devuélvelo a tiempo.`,
-              enviado: true,
-              fechaEnvio: admin.firestore.Timestamp.now(),
-              canal: 'interno',
-              leida: false
-            });
+            continue;
+          }
+
+          // 3. CREAR LA NUEVA NOTIFICACIÓN
+          console.log(
+            ` -> 📤 Enviando recordatorio...`
+          );
+          
+          await notificationsRef.add({
+            tipo: 'recordatorio',
+            prestamoId: prestamoId,
+            mensaje: `⏰ RECORDATORIO: Tu préstamo de ${loanData.nombreMaterial || 'material'} vence pronto. Por favor devuélvelo a tiempo.`,
+            enviado: true,
+            fechaEnvio: admin.firestore.Timestamp.now(),
+            canal: 'interno',
+            leida: false
           });
-        
-        reminderPromises.push(checkPromise);
+          
+          remindersSentCount++;
+          console.log(` -> ✅ Recordatorio enviado exitosamente`);
+
+        } catch (loanError: any) {
+          console.error(`❌ Error procesando préstamo ${loanDoc.id}:`, loanError);
+          errors.push(`Préstamo ${loanDoc.id}: ${loanError.message}`);
+        }
       }
     }
 
-    await Promise.all(reminderPromises);
-
     console.log(
-      `--- [CRON | send-reminders]: Finalizado. ${remindersSentCount} recordatorios enviados. ---\n`
+      `\n--- [CRON | send-reminders]: Finalizado ---`
     );
-    
+    console.log(`📊 Préstamos encontrados: ${loansFoundCount}`);
+    console.log(`✅ Recordatorios enviados: ${remindersSentCount}`);
+    console.log(`⏭️  Duplicados saltados: ${duplicatesSkipped}`);
+    if (errors.length > 0) {
+      console.error(`⚠️ Errores encontrados: ${errors.length}`);
+      console.error(errors);
+    }
+
     return NextResponse.json({ 
-      message: `Proceso completado. Se enviaron ${remindersSentCount} recordatorios.` 
+      success: true,
+      message: `Proceso completado. Se enviaron ${remindersSentCount} recordatorios.`,
+      loansFound: loansFoundCount,
+      remindersSent: remindersSentCount,
+      duplicatesSkipped,
+      errors: errors.length > 0 ? errors : undefined
     });
 
   } catch (error: any) {
     console.error("[CRON | send-reminders ERROR]:", error);
     return NextResponse.json({ 
+      success: false,
       message: "Error durante la ejecución del proceso CRON.", 
       error: error.message 
     }, { status: 500 });
