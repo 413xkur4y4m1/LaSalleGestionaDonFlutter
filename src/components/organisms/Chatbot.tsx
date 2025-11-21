@@ -1,20 +1,20 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
-import IconoGastrobot from '../atoms/IconoGastrobot';
-import CatalogView from './CatalogView';
-import LoanListView from './LoanListView';
-import DebtListView from './DebtListView';
-import { Material } from '../molecules/MaterialCard';
-import QuantitySelector from '../molecules/QuantitySelector';
-import ReturnDatePicker from '../molecules/ReturnDatePicker';
+import IconoGastrobot from '@/components/atoms/IconoGastrobot';
+import CatalogView from '@/components/organisms/CatalogView';
+import LoanListView from '@/components/organisms/LoanListView';
+import DebtListView from '@/components/organisms/DebtListView';
+import { Material } from '@/components/molecules/MaterialCard';
+import QuantitySelector from '@/components/molecules/QuantitySelector';
+import ReturnDatePicker from '@/components/molecules/ReturnDatePicker';
+import { Button } from '@/components/ui/button';
 
-// --- TIPOS Y ESTRUCTURAS DE DATOS ---
+// --- Tipos ---
 interface ChatMessage {
   id: number;
   role: 'user' | 'model';
@@ -28,24 +28,49 @@ interface LoanState {
   returnDate?: Date;
 }
 
-// --- COMPONENTES INTERNOS ---
-const SuggestionButton: React.FC<{ text: string; icon: React.ReactNode; onClick: (text: string) => void; }> = ({ text, icon, onClick }) => (
-  <button
-    onClick={() => onClick(text)}
-    className="flex items-center gap-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-sm font-medium py-2 px-3 rounded-lg transition-colors duration-200 shadow-sm"
-  >
-    {icon}
-    {text}
-  </button>
-);
+// --- Componente de QR (LÓGICA DE DESCARGA CORREGIDA) ---
+interface QRCodeDisplayProps {
+    loanCode: string;
+    materialNombre: string;
+    cantidad: number;
+}
 
-const QRCodeDisplay: React.FC<{ loanCode: string }> = ({ loanCode }) => (
-    <div className="bg-white p-4 rounded-lg flex flex-col items-center gap-2 border border-gray-200 shadow-md">
-        <QRCodeSVG value={loanCode} size={128} />
-        <p className="font-mono text-lg font-bold text-gray-800 mt-2">{loanCode}</p>
-        <p className="text-xs text-center text-gray-600">Muestra este código al administrador del laboratorio.</p>
-    </div>
-);
+const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre, cantidad }) => {
+    const qrRef = useRef<SVGSVGElement>(null);
+
+    const handleDownload = () => {
+        if (!qrRef.current) return;
+
+        // ✅ Serializar el SVG a un string
+        const svgString = new XMLSerializer().serializeToString(qrRef.current);
+        // ✅ Crear un "Data URL" que el navegador entiende como un archivo
+        const dataUrl = `data:image/svg+xml;base64,${btoa(svgString)}`;
+
+        // ✅ Crear un enlace de descarga para el archivo SVG
+        const link = document.createElement("a");
+        link.href = dataUrl;
+        // ✅ El archivo se guardará como .svg, no como .png
+        const fileName = `${materialNombre.replace(/ /g, '_')}-${cantidad}.svg`;
+        link.download = fileName;
+
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    return (
+        <div className="bg-white p-4 rounded-lg flex flex-col items-center gap-3 border border-gray-200 shadow-md">
+            <QRCodeSVG value={loanCode} size={192} ref={qrRef} />
+            <p className="font-mono text-xl font-bold text-gray-800">{loanCode}</p>
+            <p className="text-sm text-center text-gray-600">Muestra este código al administrador.</p>
+            <Button onClick={handleDownload} variant="outline" className="w-full">
+                <Download className="mr-2 h-4 w-4" />
+                Descargar QR (SVG)
+            </Button>
+        </div>
+    );
+};
+
 
 // --- COMPONENTE PRINCIPAL: GASTROBOT ---
 const Gastrobot = () => {
@@ -88,7 +113,7 @@ const Gastrobot = () => {
     removeComponentFromChat();
     setLoanState({ material }); 
     addMessageToChat(`He elegido: ${material.nombre}`, 'user');
-    addMessageToChat(null, 'model', <QuantitySelector material={material} onConfirm={(quantity) => handleQuantityConfirmed(quantity, material)} onCancel={handleFlowCancelled} />);
+    addMessageToChat(null, 'model', <QuantitySelector material={material} onConfirm={(quantity: number) => handleQuantityConfirmed(quantity, material)} onCancel={handleFlowCancelled} />);
   };
 
   const handleQuantityConfirmed = (quantity: number, material: Material) => {
@@ -96,10 +121,8 @@ const Gastrobot = () => {
     const updatedLoanState = { material, quantity };
     setLoanState(updatedLoanState);
     addMessageToChat(`Necesito ${quantity} unidad(es).`, 'user');
-    addMessageToChat(`Perfecto. Has seleccionado ${quantity} de ${material.nombre}.
-
-¿Cuándo lo devolverás?`, 'model');
-    addMessageToChat(null, 'model', <ReturnDatePicker onConfirm={(date) => handleDateConfirmed(date, updatedLoanState)} onCancel={handleFlowCancelled} />);
+    addMessageToChat(`Perfecto. Has seleccionado ${quantity} de ${material.nombre}.\n\n¿Cuándo lo devolverás?`, 'model');
+    addMessageToChat(null, 'model', <ReturnDatePicker onConfirm={(date: Date) => handleDateConfirmed(date, updatedLoanState)} onCancel={handleFlowCancelled} />);
   };
   
   const handleDateConfirmed = async (date: Date, finalLoanState: LoanState) => {
@@ -112,6 +135,7 @@ const Gastrobot = () => {
       try {
           const body = {
               studentUid: session?.user.id,
+              studentName: session?.user.name,
               materialId: finalLoanState.material?.id,
               materialNombre: finalLoanState.material?.nombre,
               cantidad: finalLoanState.quantity,
@@ -133,20 +157,27 @@ const Gastrobot = () => {
               body: JSON.stringify(body),
           });
 
+          const data = await response.json();
+
           removeMessageFromChat(loadingId);
 
           if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'El servidor rechazó la solicitud.');
+            throw new Error(data.message || 'El servidor rechazó la solicitud.');
           }
           
-          const { loanCode } = await response.json(); 
+          const { loanCode } = data; 
+          
+          if (!loanCode) {
+            throw new Error('No se recibió el código del préstamo del servidor.');
+          }
+          
           addMessageToChat("¡Listo! Tu solicitud ha sido generada con éxito.", 'model');
-          addMessageToChat(null, 'model', <QRCodeDisplay loanCode={loanCode} />);
+          addMessageToChat(null, 'model', <QRCodeDisplay loanCode={loanCode} materialNombre={body.materialNombre} cantidad={body.cantidad} />);
           addMessageToChat("Recuerda mostrar este código en el laboratorio para recibir tu material.", 'model');
   
       } catch (error) {
           removeMessageFromChat(loadingId);
+          console.error('Error al generar préstamo:', error);
           addMessageToChat(`Lo siento, algo salió mal: ${(error as Error).message}`, 'model');
       } finally {
           setIsLoading(false);
@@ -179,7 +210,6 @@ const Gastrobot = () => {
             addMessageToChat(null, 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
 
         } else if (textToSend === '📋 Ver mis préstamos activos') {
-            // --- FIX: Corregido el nombre de la función ---
             const loadingId = addMessageToChat("Consultando tus préstamos...", 'model');
             const res = await fetch(`/api/prestamos?studentUid=${session.user.id}`);
             const loans = await res.json();
@@ -189,12 +219,9 @@ const Gastrobot = () => {
             addMessageToChat(null, 'model', <LoanListView loans={loans} />);
 
         } else if (textToSend === '💰 Consultar adeudos') {
-            const loadingId = addMessageToChat("Buscando si tienes adeudos pendientes...", 'model');
-            const res = await fetch(`/api/adeudos?studentUid=${session.user.id}`);
-            const debts = await res.json();
-            removeMessageFromChat(loadingId);
-            if (!res.ok) throw new Error(debts.message || 'No pude consultar tus adeudos.');
-            addMessageToChat(null, 'model', <DebtListView debts={debts} />);
+            // ✅ CORRECCIÓN: Ahora DebtListView maneja su propio fetching
+            addMessageToChat("Aquí tienes un resumen de tus adeudos:", 'model');
+            addMessageToChat(null, 'model', <DebtListView studentUid={session.user.id} />);
 
         } else { // Fallback a Genkit
             isGenkitCall = true;
@@ -219,7 +246,6 @@ const Gastrobot = () => {
     }
   };
 
-  // --- RENDERIZADO DEL COMPONENTE ---
   return (
     <div className="bg-white shadow-xl rounded-lg w-full h-full flex flex-col border border-gray-200">
         <div className="p-3 bg-white rounded-t-lg flex items-center border-b border-gray-200">
@@ -261,5 +287,12 @@ const Gastrobot = () => {
     </div>
   );
 };
+
+const SuggestionButton: React.FC<{ text: string; icon: React.ReactNode; onClick: (text: string) => void }> = ({ text, icon, onClick }) => (
+    <button onClick={() => onClick(text)} className="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 px-3 rounded-full flex items-center gap-2 transition-colors duration-150 shadow-sm border border-gray-200">
+        {icon}
+        {text}
+    </button>
+);
 
 export default Gastrobot;
