@@ -29,7 +29,10 @@ export async function GET(request: NextRequest) {
   console.log("\n--- [CRON | check-expired-loans]: Verificando préstamos vencidos... ---");
   
   const db = getDb();
-  const now = new Date();
+  // ✅ CORRECCIÓN: Usar Timestamp de Firebase en lugar de Date
+  const now = admin.firestore.Timestamp.now();
+  console.log(`⏰ Fecha actual (Timestamp): ${now.toDate().toISOString()}`);
+  
   let processedCount = 0;
   let batchesCommitted = 0;
   let errors: string[] = [];
@@ -51,11 +54,14 @@ export async function GET(request: NextRequest) {
       const loansRef = studentDoc.ref.collection('Prestamos');
       
       // 1. BUSCAR PRÉSTAMOS ACTIVOS Y VENCIDOS
+      // Compara fechaDevolucion (timestamp) con now (timestamp)
       const expiredLoansQuery = loansRef
         .where('estado', '==', 'activo')
         .where('fechaDevolucion', '<', now);
       
       const loansSnapshot = await expiredLoansQuery.get();
+      
+      console.log(`   🔍 Query ejecutado para ${studentData.nombre || studentDoc.id}: ${loansSnapshot.size} préstamos vencidos encontrados`);
       
       if (loansSnapshot.empty) continue;
 
@@ -71,11 +77,13 @@ export async function GET(request: NextRequest) {
           processedCount++;
           const loanData = loanDoc.data();
           
+          // Mostrar fecha de vencimiento para debug
+          const fechaVencimiento = loanData.fechaDevolucion?.toDate();
           console.log(
-            ` -> Procesando préstamo ${loanDoc.id} (${loanData.nombreMaterial}).`
+            ` -> Procesando préstamo ${loanDoc.id} (${loanData.nombreMaterial}) - Venció: ${fechaVencimiento?.toISOString() || 'N/A'}`
           );
 
-          // 2. ACTUALIZAR EL ESTADO DEL PRÉSTAMO
+          // 2. ACTUALIZAR EL ESTADO DEL PRÉSTAMO A "expirado"
           writeBatch.update(loanDoc.ref, {
             estado: 'expirado',
             fechaExpiracion: admin.firestore.Timestamp.now()
