@@ -88,8 +88,10 @@ export async function GET(request: NextRequest) {
             try {
               const loanData = loanDoc.data();
               
-              // Validar que tenga los campos necesarios
-              if (!loanData.nombreMaterial || !loanData.cantidad || !loanData.precio_unitario) {
+              // Validar que tenga los campos necesarios (verificar que existen, no su valor)
+              if (!loanData.nombreMaterial || 
+                  loanData.cantidad === undefined || loanData.cantidad === null ||
+                  loanData.precio_unitario === undefined || loanData.precio_unitario === null) {
                 console.log(`   ⏭️  Préstamo ${loanDoc.id} sin datos completos, saltando...`);
                 continue;
               }
@@ -110,12 +112,14 @@ export async function GET(request: NextRequest) {
               const adeudoCodigo = `ADEU-${loanData.grupo || 'XXX'}-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`;
               
               // Crear adeudo
+              const precioAjustado = loanData.precio_total || (loanData.cantidad * loanData.precio_unitario) || 0;
+              
               const adeudoData = {
                 codigo: adeudoCodigo,
                 nombreMaterial: loanData.nombreMaterial,
                 cantidad: loanData.cantidad,
                 precio_unitario: loanData.precio_unitario,
-                precio_ajustado: loanData.precio_total || (loanData.cantidad * loanData.precio_unitario),
+                precio_ajustado: precioAjustado,
                 moneda: 'MXN',
                 estado: 'pendiente',
                 tipo: 'vencimiento',
@@ -158,7 +162,7 @@ export async function GET(request: NextRequest) {
                         <div style="background-color: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
                           <p><strong>📦 Material:</strong> ${loanData.nombreMaterial}</p>
                           <p><strong>🔢 Cantidad:</strong> ${loanData.cantidad}</p>
-                          <p><strong>💵 Monto a pagar:</strong> $${adeudoData.precio_ajustado.toFixed(2)} MXN</p>
+                          <p><strong>💵 Monto a pagar:</strong> ${precioAjustado > 0 ? `${precioAjustado.toFixed(2)} MXN` : 'Contacta al laboratorio'}</p>
                           <p><strong>🔖 Código de adeudo:</strong> ${adeudoCodigo}</p>
                           <p><strong>⏰ Fecha de vencimiento original:</strong> ${loanData.fechaDevolucion.toDate().toLocaleString('es-MX')}</p>
                         </div>
