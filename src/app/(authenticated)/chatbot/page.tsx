@@ -72,7 +72,7 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
 };
 
 
-// --- COMPONENTE PRINCIPAL: GASTROBOT (Sin cambios) ---
+// --- COMPONENTE PRINCIPAL: GASTROBOT ---
 const Gastrobot = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -219,12 +219,9 @@ const Gastrobot = () => {
             addMessageToChat(null, 'model', <LoanListView loans={loans} />);
 
         } else if (textToSend === '💰 Consultar adeudos') {
-            const loadingId = addMessageToChat("Buscando si tienes adeudos pendientes...", 'model');
-            const res = await fetch(`/api/adeudos?studentUid=${session.user.id}`);
-            const debts = await res.json();
-            removeMessageFromChat(loadingId);
-            if (!res.ok) throw new Error(debts.message || 'No pude consultar tus adeudos.');
-            addMessageToChat(null, 'model', <DebtListView debts={debts} />);
+            // ✅ CORRECCIÓN: Ahora DebtListView maneja su propio fetching
+            addMessageToChat("Aquí tienes un resumen de tus adeudos:", 'model');
+            addMessageToChat(null, 'model', <DebtListView studentUid={session.user.id} />);
 
         } else { // Fallback a Genkit
             isGenkitCall = true;
