@@ -1,49 +1,38 @@
-// /app/api/adeudos/[adeudoId]/route.ts
+// /app/api/formularios/[formId]/route.ts
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firestore-operations-server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { adeudoId: string } }
+  { params }: { params: { formId: string } }
 ) {
   try {
-    const { adeudoId } = params;
-    const { searchParams } = new URL(request.url);
-    const uid = searchParams.get('uid');
-
-    if (!uid) {
-      return NextResponse.json({
-        success: false,
-        message: 'UID requerido'
-      }, { status: 400 });
-    }
-
+    const { formId } = params;
     const db = getDb();
-    const adeudoDoc = await db
-      .collection('Estudiantes')
-      .doc(uid)
-      .collection('Adeudos')
-      .doc(adeudoId)
-      .get();
 
-    if (!adeudoDoc.exists) {
+    // Buscar en la colección global
+    const formDoc = await db.collection('FormulariosGlobal').doc(formId).get();
+
+    if (!formDoc.exists) {
       return NextResponse.json({
         success: false,
-        message: 'Adeudo no encontrado'
+        message: 'Formulario no encontrado'
       }, { status: 404 });
     }
 
+    const formulario = formDoc.data();
+
     return NextResponse.json({
       success: true,
-      adeudo: adeudoDoc.data()
+      formulario: formulario
     });
 
   } catch (error: any) {
-    console.error('[API | GET Adeudo]:', error);
+    console.error('[API | GET Formulario]:', error);
     return NextResponse.json({
       success: false,
-      message: 'Error al obtener el adeudo',
+      message: 'Error al obtener el formulario',
       error: error.message
     }, { status: 500 });
   }
