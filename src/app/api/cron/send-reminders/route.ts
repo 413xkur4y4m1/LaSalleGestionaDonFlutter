@@ -4,6 +4,20 @@ import * as admin from 'firebase-admin';
 import { randomBytes } from 'crypto';
 import nodemailer from 'nodemailer';
 
+// Función para generar código QR en SVG
+function generateQRCodeSVG(text: string, size: number = 200): string {
+  // Usamos una API pública para generar QR en SVG (sin dependencias adicionales)
+  const encodedText = encodeURIComponent(text);
+  // Alternativa: usar quickchart.io que genera QR en formato SVG
+  return `https://quickchart.io/qr?text=${encodedText}&size=${size}&format=svg&margin=1`;
+}
+
+// Función alternativa: generar QR como Data URL para embedding directo
+function generateQRCodeDataURL(text: string, size: number = 200): string {
+  const encodedText = encodeURIComponent(text);
+  return `https://quickchart.io/qr?text=${encodedText}&size=${size}&margin=1`;
+}
+
 // Configurar transporter de Outlook - CORREGIDO
 const transporter = nodemailer.createTransport({
   host: 'smtp-mail.outlook.com', // Cambiado de smtp.office365.com
