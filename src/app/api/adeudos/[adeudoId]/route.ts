@@ -5,10 +5,10 @@ import { getDb } from '@/lib/firestore-operations-server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { adeudoId: string } }
+  { params }: { params: Promise<{ adeudoId: string }> }
 ) {
   try {
-    const { adeudoId } = params;
+    const { adeudoId } = await params;
     const { searchParams } = new URL(request.url);
     const uid = searchParams.get('uid');
 

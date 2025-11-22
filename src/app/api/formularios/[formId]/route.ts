@@ -5,10 +5,10 @@ import { getDb } from '@/lib/firestore-operations-server';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { formId: string } }
+  { params }: { params: Promise<{ formId: string }> }
 ) {
   try {
-    const { formId } = params;
+    const { formId } = await params;
     const db = getDb();
 
     // Buscar en la colección global
