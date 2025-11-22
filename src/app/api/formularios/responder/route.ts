@@ -27,10 +27,10 @@ function generateQRCodeDataURL(text: string, size: number = 300): string {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { formId: string } }
+  { params }: { params: Promise<{ formId: string }> }
 ) {
   try {
-    const { formId } = params;
+    const { formId } = await params;
     const body = await request.json();
     
     const {
