@@ -4,23 +4,15 @@ import * as admin from 'firebase-admin';
 import { randomBytes } from 'crypto';
 import nodemailer from 'nodemailer';
 
-// Función para generar código QR en SVG
-function generateQRCodeSVG(text: string, size: number = 200): string {
-  // Usamos una API pública para generar QR en SVG (sin dependencias adicionales)
-  const encodedText = encodeURIComponent(text);
-  // Alternativa: usar quickchart.io que genera QR en formato SVG
-  return `https://quickchart.io/qr?text=${encodedText}&size=${size}&format=svg&margin=1`;
-}
-
-// Función alternativa: generar QR como Data URL para embedding directo
+// Función para generar código QR como Data URL
 function generateQRCodeDataURL(text: string, size: number = 200): string {
   const encodedText = encodeURIComponent(text);
   return `https://quickchart.io/qr?text=${encodedText}&size=${size}&margin=1`;
 }
 
-// Configurar transporter de Outlook - CORREGIDO
+// Configurar transporter de Outlook
 const transporter = nodemailer.createTransport({
-  host: 'smtp-mail.outlook.com', // Cambiado de smtp.office365.com
+  host: 'smtp-mail.outlook.com',
   port: 587,
   secure: false,
   auth: {
@@ -29,7 +21,7 @@ const transporter = nodemailer.createTransport({
   },
   tls: { 
     ciphers: 'SSLv3',
-    rejectUnauthorized: false // Añadido para evitar problemas de certificados
+    rejectUnauthorized: false
   }
 });
 
@@ -82,7 +74,6 @@ export async function GET(request: NextRequest) {
       // ============================================
       // PARTE 1: CONVERTIR EXPIRADOS A ADEUDOS
       // ============================================
-      // CORREGIDO: Buscar por 'fechaDevolucion' no 'fechaExpiracion'
       try {
         const expiredLoansSnapshot = await loansRef
           .where('estado', '==', 'expirado')
@@ -102,7 +93,7 @@ export async function GET(request: NextRequest) {
             try {
               const loanData = loanDoc.data();
               
-              // Validar que tenga los campos necesarios (verificar que existen, no su valor)
+              // Validar que tenga los campos necesarios
               if (!loanData.nombreMaterial || 
                   loanData.cantidad === undefined || loanData.cantidad === null ||
                   loanData.precio_unitario === undefined || loanData.precio_unitario === null) {
@@ -176,7 +167,7 @@ export async function GET(request: NextRequest) {
                         <div style="background-color: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
                           <p><strong>📦 Material:</strong> ${loanData.nombreMaterial}</p>
                           <p><strong>🔢 Cantidad:</strong> ${loanData.cantidad}</p>
-                          <p><strong>💵 Monto a pagar:</strong> ${precioAjustado > 0 ? `${precioAjustado.toFixed(2)} MXN` : 'Contacta al laboratorio'}</p>
+                          <p><strong>💵 Monto a pagar:</strong> ${precioAjustado > 0 ? `$${precioAjustado.toFixed(2)} MXN` : 'Contacta al laboratorio'}</p>
                           <p><strong>🔖 Código de adeudo:</strong> ${adeudoCodigo}</p>
                           <p><strong>⏰ Fecha de vencimiento original:</strong> ${loanData.fechaDevolucion.toDate().toLocaleString('es-MX')}</p>
                         </div>
@@ -287,6 +278,9 @@ export async function GET(request: NextRequest) {
                     minute: '2-digit'
                   });
                   
+                  // Generar imagen QR
+                  const qrImageUrl = generateQRCodeDataURL(qrUrl, 300);
+                  
                   await transporter.sendMail({
                     from: process.env.EMAIL_USER,
                     to: studentEmail,
@@ -309,24 +303,29 @@ export async function GET(request: NextRequest) {
                             <p style="margin: 5px 0;"><strong>🏷️ Código:</strong> ${loanData.codigo || loanDoc.id}</p>
                           </div>
                           
-                          <div style="background-color: white; padding: 20px; border-radius: 8px; margin: 20px 0; text-align: center;">
-                            <p style="margin-bottom: 15px;"><strong>🎫 Usa este enlace para devolver el material:</strong></p>
+                          <div style="background-color: white; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center; border: 3px solid #10b981;">
+                            <p style="margin-bottom: 15px; font-size: 16px;"><strong>📱 Tu Código QR de Devolución:</strong></p>
                             
-                            <a href="${qrUrl}" style="background-color: #dc2626; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; margin: 10px 0;">
+                            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; display: inline-block;">
+                              <img src="${qrImageUrl}" alt="Código QR" style="max-width: 300px; width: 100%; height: auto; display: block;" />
+                            </div>
+                            
+                            <p style="font-size: 14px; color: #374151; margin: 15px 0;">
+                              Presenta este código en el laboratorio para devolver tu material
+                            </p>
+                            
+                            <a href="${qrUrl}" style="background-color: #dc2626; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; margin: 10px 0;">
                               📱 Ver Código de Devolución
                             </a>
                             
-                            <p style="font-size: 12px; color: #6b7280; margin-top: 15px;">
-                              O copia este enlace: <br/>
-                              <span style="background-color: #f3f4f6; padding: 5px 10px; border-radius: 4px; font-family: monospace; font-size: 11px; word-break: break-all;">
-                                ${qrUrl}
-                              </span>
+                            <p style="font-size: 11px; color: #6b7280; margin-top: 15px; padding: 10px; background-color: #f9fafb; border-radius: 4px; word-break: break-all; font-family: monospace;">
+                              ${qrUrl}
                             </p>
                           </div>
                           
                           <div style="background-color: #dbeafe; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
                             <p style="margin: 0; font-size: 14px;">
-                              <strong>💡 Tip:</strong> Este código QR es válido hasta 2 horas después de la fecha de devolución. ¡Devuelve a tiempo para evitar adeudos!
+                              <strong>💡 Importante:</strong> Este código QR es válido hasta 2 horas después de la fecha de devolución. ¡Devuelve a tiempo para evitar adeudos!
                             </p>
                           </div>
                           
