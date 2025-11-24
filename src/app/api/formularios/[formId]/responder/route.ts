@@ -54,6 +54,10 @@ export async function POST(
       }, { status: 400 });
     }
 
+    // ⭐ VALIDAR Y NORMALIZAR EL PRECIO
+    const montoSeguro = parseFloat(precio_ajustado) || 0;
+    const montoFormateado = montoSeguro.toFixed(2);
+
     const db = getDb();
     const batch = db.batch();
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://tu-dominio.vercel.app';
@@ -188,8 +192,8 @@ export async function POST(
         
         await batch.commit();
         
-        // URL de pago
-        const paymentUrl = `${baseUrl}/pago/${paymentId}?adeudo=${adeudoId}&uid=${uid}&monto=${precio_ajustado}`;
+        // ⭐ URL de pago con monto seguro
+        const paymentUrl = `${baseUrl}/pago/${paymentId}?adeudo=${adeudoId}&uid=${uid}&monto=${montoFormateado}`;
         
         // Enviar email con link de pago
         if (correoEstudiante) {
@@ -211,7 +215,7 @@ export async function POST(
                   <div style="background-color: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
                     <p style="margin: 5px 0;"><strong>📦 Material:</strong> ${nombreMaterial}</p>
                     <p style="margin: 5px 0;"><strong>🔢 Cantidad:</strong> ${cantidad}</p>
-                    <p style="margin: 5px 0;"><strong>💵 Monto a pagar:</strong> $${precio_ajustado.toFixed(2)} MXN</p>
+                    <p style="margin: 5px 0;"><strong>💵 Monto a pagar:</strong> $${montoFormateado} MXN</p>
                   </div>
                   
                   <div style="text-align: center; margin: 30px 0;">
@@ -280,7 +284,7 @@ export async function POST(
                   <div style="background-color: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
                     <p style="margin: 5px 0;"><strong>📦 Material:</strong> ${nombreMaterial}</p>
                     <p style="margin: 5px 0;"><strong>🔢 Cantidad:</strong> ${cantidad}</p>
-                    <p style="margin: 5px 0;"><strong>💵 Monto a pagar:</strong> $${precio_ajustado.toFixed(2)} MXN</p>
+                    <p style="margin: 5px 0;"><strong>💵 Monto a pagar:</strong> $${montoFormateado} MXN</p>
                     <p style="margin: 5px 0;"><strong>🔖 Código:</strong> ${codigoAdeudo}</p>
                   </div>
                   
