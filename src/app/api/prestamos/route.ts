@@ -1,4 +1,4 @@
-
+// /app/api/prestamos/route.ts
 // FORZANDO LA ACTUALIZACIÓN DE CACHÉ PARA INCLUIR LA DATABASE URL
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getRtdb } from '@/lib/firestore-operations-server';
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 }
 
 
-// --- POST (CORREGIDO PARA INCLUIR materialId) ---
+// --- POST (CORREGIDO PARA USAR PRECIOS DEL FRONTEND) ---
 
 const generateLoanCode = (grupo: string) => {
     const randomPart = Math.floor(10000 + Math.random() * 90000);
@@ -51,18 +51,53 @@ export async function POST(req: NextRequest) {
 
     try {
         const body = await req.json();
-        const { studentUid, materialId, materialNombre, cantidad, fechaDevolucion, grupo } = body;
+        const { 
+            studentUid, 
+            materialId, 
+            materialNombre, 
+            cantidad, 
+            fechaDevolucion, 
+            grupo,
+            precio_unitario,  // ⭐ RECIBIR DEL FRONTEND
+            precio_ajustado   // ⭐ RECIBIR DEL FRONTEND
+        } = body;
 
         if (!studentUid || !materialId || !cantidad || !fechaDevolucion || !grupo) {
             return NextResponse.json({ message: 'Faltan datos requeridos.' }, { status: 400 });
         }
         
+        // ⭐ VALIDAR PRECIOS
+        const precioUnitarioSeguro = parseFloat(precio_unitario) || 0;
+        const precioAjustadoSeguro = parseFloat(precio_ajustado) || 0;
+        
+        console.log('📦 Datos recibidos:', {
+            materialId,
+            cantidad,
+            precio_unitario: precioUnitarioSeguro,
+            precio_ajustado: precioAjustadoSeguro
+        });
+
+        // Verificar que el material existe en RTDB
         const materialRtdbRef = rtdb.ref(`materiales/${materialId}`);
         const materialSnapshot = await materialRtdbRef.once('value');
+        
         if (!materialSnapshot.exists()) {
-             return NextResponse.json({ message: `El material con ID ${materialId} no existe en el inventario.` }, { status: 404 });
+            return NextResponse.json({ 
+                message: `El material con ID ${materialId} no existe en el inventario.` 
+            }, { status: 404 });
         }
+
         const materialData = materialSnapshot.val();
+        
+        // ⭐ USAR PRECIOS DEL FRONTEND (ya vienen del material completo)
+        // Si por alguna razón no vienen, usar los de RTDB como fallback
+        const precioFinal = precioUnitarioSeguro > 0 
+            ? precioUnitarioSeguro 
+            : (materialData.precio_unitario || materialData.precio || 0);
+            
+        const precioAjustadoFinal = precioAjustadoSeguro > 0 
+            ? precioAjustadoSeguro 
+            : (materialData.precio_ajustado || precioFinal);
 
         const loanCode = generateLoanCode(grupo);
         
@@ -74,11 +109,13 @@ export async function POST(req: NextRequest) {
             transaction.set(prestamoRef, {
                 studentUid: studentUid,
                 codigo: loanCode,
-                materialId: materialId, // <-- ✅ CORRECCIÓN: Se añade el materialId
+                materialId: materialId,
                 nombreMaterial: materialNombre,
                 cantidad: Number(cantidad),
-                precio_unitario: materialData.precio || 0,
-                precio_total: (materialData.precio || 0) * Number(cantidad),
+                // ⭐ USAR PRECIOS VALIDADOS
+                precio_unitario: precioFinal,
+                precio_ajustado: precioAjustadoFinal,
+                precio_total: precioAjustadoFinal * Number(cantidad), // ⭐ Usar precio ajustado
                 fechaSolicitud: FieldValue.serverTimestamp(),
                 fechaDevolucion: new Date(fechaDevolucion),
                 estado: 'pendiente',
@@ -96,11 +133,21 @@ export async function POST(req: NextRequest) {
             });
         });
         
-        console.log(`Solicitud de préstamo ${loanCode} y QR creado exitosamente. Esperando validación de admin.`);
-        return NextResponse.json({ message: "Solicitud de préstamo creada. Muestra el QR al administrador.", loanCode: loanCode }, { status: 201 });
+        console.log(`✅ Solicitud de préstamo ${loanCode} creada con precios:`, {
+            precio_unitario: precioFinal,
+            precio_ajustado: precioAjustadoFinal,
+            precio_total: precioAjustadoFinal * Number(cantidad)
+        });
+        
+        return NextResponse.json({ 
+            message: "Solicitud de préstamo creada. Muestra el QR al administrador.", 
+            loanCode: loanCode 
+        }, { status: 201 });
 
     } catch (error: any) {
         console.error("Error en la creación de la solicitud de préstamo:", error);
-        return NextResponse.json({ message: error.message || 'Error interno del servidor.' }, { status: 500 });
+        return NextResponse.json({ 
+            message: error.message || 'Error interno del servidor.' 
+        }, { status: 500 });
     }
 }

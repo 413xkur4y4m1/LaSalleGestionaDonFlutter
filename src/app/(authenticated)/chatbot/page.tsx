@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download } from 'lucide-react';
+import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download, Plus, Minus } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 import IconoGastrobot from '@/components/atoms/IconoGastrobot';
@@ -10,11 +10,17 @@ import CatalogView from '@/components/organisms/CatalogView';
 import LoanListView from '@/components/organisms/LoanListView';
 import DebtListView from '@/components/organisms/DebtListView';
 import { Material } from '@/components/molecules/MaterialCard';
-import QuantitySelector from '@/components/molecules/QuantitySelector';
 import ReturnDatePicker from '@/components/molecules/ReturnDatePicker';
 import { Button } from '@/components/ui/button';
 
 // --- Tipos ---
+// Extender Material para incluir campos de Firebase Realtime
+interface MaterialCompleto extends Material {
+  cantidad: number;
+  precio_unitario: number;
+  precio_ajustado: number;
+}
+
 interface ChatMessage {
   id: number;
   role: 'user' | 'model';
@@ -23,7 +29,7 @@ interface ChatMessage {
 }
 
 interface LoanState {
-  material?: Material;
+  material?: MaterialCompleto;
   quantity?: number;
   returnDate?: Date;
 }
@@ -62,6 +68,143 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
         <Download className="mr-2 h-4 w-4" />
         Descargar QR (SVG)
       </Button>
+    </div>
+  );
+};
+
+// --- NUEVO: Selector de Cantidad Mejorado ---
+interface QuantitySelectorProps {
+  material: MaterialCompleto;
+  onConfirm: (quantity: number) => void;
+  onCancel: () => void;
+}
+
+const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm, onCancel }) => {
+  const [quantity, setQuantity] = useState<number>(1);
+  const [error, setError] = useState<string>('');
+
+  const handleIncrement = () => {
+    if (quantity < material.cantidad) {
+      setQuantity(prev => prev + 1);
+      setError('');
+    }
+  };
+
+  const handleDecrement = () => {
+    if (quantity > 1) {
+      setQuantity(prev => prev - 1);
+      setError('');
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    
+    // Permitir campo vacío temporalmente
+    if (value === '') {
+      setQuantity(0);
+      setError('');
+      return;
+    }
+
+    const numValue = parseInt(value, 10);
+    
+    // Validar que sea un número
+    if (isNaN(numValue)) {
+      setError('Ingresa un número válido');
+      return;
+    }
+
+    // Validar rango
+    if (numValue < 1) {
+      setError('Mínimo 1 unidad');
+      setQuantity(1);
+      return;
+    }
+
+    if (numValue > material.cantidad) {
+      setError(`Máximo ${material.cantidad} disponibles`);
+      setQuantity(material.cantidad);
+      return;
+    }
+
+    setQuantity(numValue);
+    setError('');
+  };
+
+  const handleConfirm = () => {
+    if (quantity < 1) {
+      setError('Selecciona al menos 1 unidad');
+      setQuantity(1);
+      return;
+    }
+    if (quantity > material.cantidad) {
+      setError(`Máximo ${material.cantidad} disponibles`);
+      return;
+    }
+    onConfirm(quantity);
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-md max-w-sm mx-auto">
+      <h3 className="font-semibold text-gray-800 mb-3 text-center">
+        ¿Cuántas unidades de <span className="text-red-600">{material.nombre}</span>?
+      </h3>
+      
+      <div className="flex flex-col gap-3">
+        <div className="text-center text-sm text-gray-600">
+          Disponibles: <span className="font-bold text-green-600">{material.cantidad}</span>
+        </div>
+
+        {/* Selector mejorado para móvil */}
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={handleDecrement}
+            disabled={quantity <= 1}
+            className="p-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg transition-colors"
+          >
+            <Minus className="h-5 w-5" />
+          </button>
+
+          <input
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            value={quantity === 0 ? '' : quantity}
+            onChange={handleInputChange}
+            className="w-20 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg py-2 focus:outline-none focus:border-red-500"
+            placeholder="0"
+          />
+
+          <button
+            onClick={handleIncrement}
+            disabled={quantity >= material.cantidad}
+            className="p-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg transition-colors"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-600 text-center">{error}</p>
+        )}
+
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={quantity < 1 || quantity > material.cantidad}
+            className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:text-gray-500 text-white rounded-lg font-medium transition-colors"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -106,7 +249,7 @@ const Gastrobot = () => {
   };
 
   // --- MANEJADORES DE FLUJO ---
-  const handleMaterialSelected = (material: Material) => {
+  const handleMaterialSelected = (material: MaterialCompleto) => {
     setShowSuggestions(false);
     removeComponentFromChat();
     setLoanState({ material });
@@ -120,7 +263,7 @@ const Gastrobot = () => {
     );
   };
 
-  const handleQuantityConfirmed = (quantity: number, material: Material) => {
+  const handleQuantityConfirmed = (quantity: number, material: MaterialCompleto) => {
     removeComponentFromChat();
     const updatedLoanState = { material, quantity };
     setLoanState(updatedLoanState);
@@ -143,15 +286,23 @@ const Gastrobot = () => {
     setIsLoading(true);
 
     try {
+      // ⭐ ASEGURAR QUE SE ENVÍEN LOS PRECIOS CORRECTAMENTE
+      const material = finalLoanState.material!;
+      
       const body = {
         studentUid: session?.user.id,
         studentName: session?.user.name,
-        materialId: finalLoanState.material?.id,
-        materialNombre: finalLoanState.material?.nombre,
+        materialId: material.id,
+        materialNombre: material.nombre,
         cantidad: finalLoanState.quantity,
         fechaDevolucion: date.toISOString(),
         grupo: (session?.user as any)?.grupo,
+        // ⭐ AGREGAR PRECIOS EXPLÍCITAMENTE
+        precio_unitario: material.precio_unitario || 0,
+        precio_ajustado: material.precio_ajustado || 0,
       };
+
+      console.log('📦 Datos del préstamo:', body); // Debug
 
       if (!body.studentUid || !body.materialId || !body.materialNombre || !body.cantidad) {
         throw new Error("Faltan detalles del material o de la fecha.");
@@ -215,8 +366,11 @@ const Gastrobot = () => {
     try {
       if (textToSend === '🛒 Solicitar un préstamo') {
         addMessageToChat("Aquí tienes nuestro catálogo:", 'model');
-        addMessageToChat(null, 'model', <CatalogView onMaterialSelect={handleMaterialSelected} />);
-
+        addMessageToChat(null, 'model', 
+          <CatalogView 
+            onMaterialSelect={(mat) => handleMaterialSelected(mat as MaterialCompleto)} 
+          />
+        );
       } else if (textToSend === '📋 Ver mis préstamos activos') {
         const loadingId = addMessageToChat("Consultando tus préstamos...", 'model');
         const res = await fetch(`/api/prestamos?studentUid=${session.user.id}`);
