@@ -3,19 +3,21 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 
-export default function PagoExitosoPage() {
+function PagoExitosoContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   
-  const paymentId = searchParams?.get('payment') || '';
-  const adeudoId = searchParams?.get('adeudo') || '';
+  const paymentId = searchParams?.get('payment') || 'N/A';
+  const adeudoId = searchParams?.get('adeudo') || 'N/A';
+  const monto = searchParams?.get('monto') || '0';
+  const transaccionId = searchParams?.get('transaccionId') || '';
 
   useEffect(() => {
     // Auto-redirigir después de 10 segundos
     const timer = setTimeout(() => {
-      router.push('/');
+      router.push('/dashboard');
     }, 10000);
 
     return () => clearTimeout(timer);
@@ -45,11 +47,29 @@ export default function PagoExitosoPage() {
           <div className="bg-green-50 border-l-4 border-green-500 p-6 rounded-lg mb-8 text-left">
             <div className="flex items-start">
               <div className="text-3xl mr-4">✅</div>
-              <div>
+              <div className="w-full">
                 <p className="font-semibold text-gray-800 mb-2">Confirmación de Pago</p>
                 <div className="space-y-2 text-sm text-gray-700">
-                  <p><strong>ID de Transacción:</strong> {paymentId}</p>
-                  <p><strong>ID de Adeudo:</strong> {adeudoId}</p>
+                  {transaccionId && (
+                    <p className="break-all">
+                      <strong>ID de Transacción:</strong> {transaccionId}
+                    </p>
+                  )}
+                  {paymentId !== 'N/A' && (
+                    <p className="break-all">
+                      <strong>ID de Pago:</strong> {paymentId}
+                    </p>
+                  )}
+                  {adeudoId !== 'N/A' && (
+                    <p className="break-all">
+                      <strong>ID de Adeudo:</strong> {adeudoId}
+                    </p>
+                  )}
+                  {monto !== '0' && (
+                    <p>
+                      <strong>Monto Pagado:</strong> ${parseFloat(monto).toFixed(2)} MXN
+                    </p>
+                  )}
                   <p className="text-green-700 font-semibold mt-4">
                     ✓ Tu adeudo ha sido marcado como pagado
                   </p>
@@ -66,10 +86,10 @@ export default function PagoExitosoPage() {
 
           <div className="space-y-3">
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push('/dashboard')}
               className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold transition-colors"
             >
-              Ir al Inicio
+              Ir al Dashboard
             </button>
             
             <p className="text-sm text-gray-500">
@@ -85,5 +105,22 @@ export default function PagoExitosoPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PagoExitosoPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+          </div>
+          <p className="text-gray-600">Cargando confirmación de pago...</p>
+        </div>
+      </div>
+    }>
+      <PagoExitosoContent />
+    </Suspense>
   );
 }
