@@ -31,10 +31,13 @@ export async function POST(request: NextRequest) {
       cardData
     } = body;
 
-    if (!paymentId || !adeudoId || !uid || !monto) {
+    // ⭐ VALIDAR Y NORMALIZAR EL MONTO
+    const montoSeguro = parseFloat(monto) || 0;
+
+    if (!paymentId || !adeudoId || !uid || montoSeguro <= 0) {
       return NextResponse.json({
         success: false,
-        message: 'Datos incompletos'
+        message: 'Datos incompletos o monto inválido'
       }, { status: 400 });
     }
 
@@ -74,7 +77,7 @@ export async function POST(request: NextRequest) {
     const pagoData = {
       codigoPago: codigoPago,
       nombreMaterial: adeudoData?.nombreMaterial || '',
-      precio: monto,
+      precio: montoSeguro, // ⭐ Usar monto seguro
       metodo: 'en línea',
       estado: 'pagado',
       fechaPago: admin.firestore.Timestamp.now(),
@@ -134,7 +137,7 @@ export async function POST(request: NextRequest) {
               
               <div style="background-color: #d1fae5; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10b981;">
                 <p style="margin: 5px 0;"><strong>📦 Material:</strong> ${adeudoData?.nombreMaterial}</p>
-                <p style="margin: 5px 0;"><strong>💵 Monto pagado:</strong> $${monto.toFixed(2)} MXN</p>
+                <p style="margin: 5px 0;"><strong>💵 Monto pagado:</strong> $${montoSeguro.toFixed(2)} MXN</p>
                 <p style="margin: 5px 0;"><strong>🔖 Código de pago:</strong> ${codigoPago}</p>
                 <p style="margin: 5px 0;"><strong>🆔 ID de transacción:</strong> ${transaccionId}</p>
                 <p style="margin: 5px 0;"><strong>📅 Fecha:</strong> ${new Date().toLocaleString('es-MX')}</p>
