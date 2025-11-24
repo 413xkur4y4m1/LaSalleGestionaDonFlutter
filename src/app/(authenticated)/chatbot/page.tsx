@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
-import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download, Plus, Minus } from 'lucide-react';
+import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 import IconoGastrobot from '@/components/atoms/IconoGastrobot';
@@ -83,20 +83,6 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm
   const [quantity, setQuantity] = useState<number>(1);
   const [error, setError] = useState<string>('');
 
-  const handleIncrement = () => {
-    if (quantity < material.cantidad) {
-      setQuantity(prev => prev + 1);
-      setError('');
-    }
-  };
-
-  const handleDecrement = () => {
-    if (quantity > 1) {
-      setQuantity(prev => prev - 1);
-      setError('');
-    }
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     
@@ -156,33 +142,17 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm
           Disponibles: <span className="font-bold text-green-600">{material.cantidad}</span>
         </div>
 
-        {/* Selector mejorado para móvil */}
-        <div className="flex items-center justify-center gap-3">
-          <button
-            onClick={handleDecrement}
-            disabled={quantity <= 1}
-            className="p-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg transition-colors"
-          >
-            <Minus className="h-5 w-5" />
-          </button>
-
+        {/* Input limpio sin botones */}
+        <div className="flex items-center justify-center">
           <input
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
             value={quantity === 0 ? '' : quantity}
             onChange={handleInputChange}
-            className="w-20 text-center text-2xl font-bold border-2 border-gray-300 rounded-lg py-2 focus:outline-none focus:border-red-500"
-            placeholder="0"
+            className="w-24 text-center text-3xl font-bold border-2 border-gray-300 rounded-lg py-3 focus:outline-none focus:border-red-500"
+            placeholder="1"
           />
-
-          <button
-            onClick={handleIncrement}
-            disabled={quantity >= material.cantidad}
-            className="p-3 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 disabled:text-gray-400 rounded-lg transition-colors"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
         </div>
 
         {error && (
