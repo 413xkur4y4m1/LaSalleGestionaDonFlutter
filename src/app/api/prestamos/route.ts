@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb, getRtdb } from '@/lib/firestore-operations-server';
 import { FieldValue } from 'firebase-admin/firestore';
+import { randomBytes } from 'crypto';
 
 // --- GET (No se modifica) ---
 export async function GET(req: NextRequest) {
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
 }
 
 
-// --- POST (CORREGIDO PARA USAR PRECIOS DEL FRONTEND) ---
+// --- POST (CORREGIDO PARA USAR PRECIOS DEL FRONTEND + DUAL QR) ---
 
 const generateLoanCode = (grupo: string) => {
     const randomPart = Math.floor(10000 + Math.random() * 90000);
@@ -99,10 +100,12 @@ export async function POST(req: NextRequest) {
             ? precioAjustadoSeguro 
             : (materialData.precio_ajustado || precioFinal);
 
-        const loanCode = generateLoanCode(grupo);
+        // ⭐ GENERAR CÓDIGOS SEPARADOS
+        const loanCode = generateLoanCode(grupo); // QR Azul (Activación)
+        const qrToken = randomBytes(32).toString('hex'); // QR Verde (Devolución)
         
         const prestamoRef = db.collection(`Estudiantes/${studentUid}/Prestamos`).doc(loanCode);
-        const qrRef = db.collection('qrs').doc(loanCode);
+        const qrRef = db.collection('qrs').doc(loanCode); // Solo para QR de activación
 
         await db.runTransaction(async (transaction) => {
             
@@ -115,13 +118,16 @@ export async function POST(req: NextRequest) {
                 // ⭐ USAR PRECIOS VALIDADOS
                 precio_unitario: precioFinal,
                 precio_ajustado: precioAjustadoFinal,
-                precio_total: precioAjustadoFinal * Number(cantidad), // ⭐ Usar precio ajustado
+                precio_total: precioAjustadoFinal * Number(cantidad),
                 fechaSolicitud: FieldValue.serverTimestamp(),
                 fechaDevolucion: new Date(fechaDevolucion),
                 estado: 'pendiente',
-                grupo: grupo
+                grupo: grupo,
+                // ⭐ AGREGAR TOKEN DE DEVOLUCIÓN
+                qrToken: qrToken
             });
 
+            // QR de activación (para que admin active el préstamo)
             transaction.set(qrRef, {
                 status: 'pendiente',
                 operationId: loanCode,
@@ -133,15 +139,18 @@ export async function POST(req: NextRequest) {
             });
         });
         
-        console.log(`✅ Solicitud de préstamo ${loanCode} creada con precios:`, {
+        console.log(`✅ Solicitud de préstamo ${loanCode} creada:`, {
             precio_unitario: precioFinal,
             precio_ajustado: precioAjustadoFinal,
-            precio_total: precioAjustadoFinal * Number(cantidad)
+            precio_total: precioAjustadoFinal * Number(cantidad),
+            qrToken: qrToken.substring(0, 16) + '...'
         });
         
+        // ⭐ DEVOLVER AMBOS CÓDIGOS AL FRONTEND
         return NextResponse.json({ 
             message: "Solicitud de préstamo creada. Muestra el QR al administrador.", 
-            loanCode: loanCode 
+            loanCode: loanCode,      // QR Azul de Activación
+            qrToken: qrToken         // QR Verde de Devolución
         }, { status: 201 });
 
     } catch (error: any) {
