@@ -141,12 +141,31 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "No se proporcionó un código QR válido." }, { status: 400 });
         }
 
-        console.log(`Initiating validation for QR ID: ${qrData}`);
+        console.log(`📥 QR recibido: ${qrData}`);
+
+        // ⭐ LIMPIAR URL Y EXTRAER SOLO EL TOKEN
+        let cleanQrData = qrData.trim();
+        
+        // Si es una URL completa, extraer solo el token
+        if (cleanQrData.includes('://')) {
+            // Extraer el último segmento de la URL
+            const urlParts = cleanQrData.split('/');
+            cleanQrData = urlParts[urlParts.length - 1];
+            
+            // Remover query params si existen
+            if (cleanQrData.includes('?')) {
+                cleanQrData = cleanQrData.split('?')[0];
+            }
+            
+            console.log(`🔗 URL detectada. Token extraído: ${cleanQrData.substring(0, 20)}...`);
+        }
+
+        console.log(`🔍 Iniciando validación para: ${cleanQrData}`);
 
         // ============================================
-        // TIPO 1: QR del sistema antiguo (colección 'qrs')
+        // TIPO 1: QR de ACTIVACIÓN (colección 'qrs')
         // ============================================
-        const qrDocRef = adminDb.collection('qrs').doc(qrData);
+        const qrDocRef = adminDb.collection('qrs').doc(cleanQrData);
         const qrDoc = await qrDocRef.get();
 
         if (qrDoc.exists) {
@@ -156,15 +175,17 @@ export async function POST(request: Request) {
             const operationType = qrCodeData?.operationType;
             const studentUid = qrCodeData?.studentUid;
 
+            console.log(`📋 QR encontrado en colección 'qrs': ${operationType}`);
+
             if (!operationId || !operationType) {
-                console.error(`Critical: QR document '${qrData}' is malformed.`);
+                console.error(`❌ QR document '${cleanQrData}' is malformed.`);
                 return NextResponse.json({ 
                     message: "El código QR está malformado y no se puede procesar." 
                 }, { status: 500 });
             }
             
             if (status === 'validado') {
-                console.log(`QR '${qrData}' already validated.`);
+                console.log(`⚠️ QR '${cleanQrData}' already validated.`);
                 return NextResponse.json(
                     {
                         message: `Este código QR ya fue utilizado anteriormente.`,
@@ -212,7 +233,7 @@ export async function POST(request: Request) {
                     });
                 });
                 
-                console.log(`Transaction successful: QR '${qrData}' validated.`);
+                console.log(`✅ Transaction successful: QR '${cleanQrData}' validated.`);
 
                 const operationData = operationDoc.data();
                 return NextResponse.json(
@@ -226,12 +247,14 @@ export async function POST(request: Request) {
         }
 
         // ============================================
-        // TIPO 2: QR de Recordatorio/Devolución (qrToken en Prestamos)
+        // TIPO 2: QR de DEVOLUCIÓN (qrToken en Prestamos)
         // ============================================
-        const loanResult = await findLoanByQRToken(qrData);
+        const loanResult = await findLoanByQRToken(cleanQrData);
         
         if (loanResult) {
             const { studentId, studentData, loanDoc, loanData } = loanResult;
+            
+            console.log(`📦 QR de devolución encontrado para préstamo: ${loanDoc.id}`);
             
             // Verificar validez del QR
             const now = Timestamp.now();
@@ -288,8 +311,9 @@ export async function POST(request: Request) {
                             </div>
                         `
                     });
+                    console.log(`📧 Email enviado a: ${studentData.correo}`);
                 } catch (emailError: any) {
-                    console.error('Error enviando email:', emailError);
+                    console.error('❌ Error enviando email:', emailError);
                 }
             }
 
@@ -305,10 +329,12 @@ export async function POST(request: Request) {
         // ============================================
         // TIPO 3: QR de Devolución de Adeudo (tokenDevolucion)
         // ============================================
-        const adeudoDevolucionResult = await findAdeudoByToken(qrData, 'tokenDevolucion');
+        const adeudoDevolucionResult = await findAdeudoByToken(cleanQrData, 'tokenDevolucion');
         
         if (adeudoDevolucionResult) {
             const { studentId, studentData, adeudoDoc, adeudoData } = adeudoDevolucionResult;
+
+            console.log(`📦 QR de devolución de adeudo encontrado: ${adeudoDoc.id}`);
 
             // Cambiar estado del adeudo a "devuelto"
             await adeudoDoc.ref.update({
@@ -343,8 +369,9 @@ export async function POST(request: Request) {
                             </div>
                         `
                     });
+                    console.log(`📧 Email enviado a: ${studentData.correo}`);
                 } catch (emailError: any) {
-                    console.error('Error enviando email:', emailError);
+                    console.error('❌ Error enviando email:', emailError);
                 }
             }
 
@@ -360,10 +387,12 @@ export async function POST(request: Request) {
         // ============================================
         // TIPO 4: QR de Pago Presencial (tokenPago)
         // ============================================
-        const adeudoPagoResult = await findAdeudoByToken(qrData, 'tokenPago');
+        const adeudoPagoResult = await findAdeudoByToken(cleanQrData, 'tokenPago');
         
         if (adeudoPagoResult) {
             const { studentId, studentData, adeudoDoc, adeudoData } = adeudoPagoResult;
+
+            console.log(`💵 QR de pago presencial encontrado: ${adeudoDoc.id}`);
 
             // Generar código de pago
             const codigoPago = `PAGO-${adeudoData.grupo || 'XXX'}-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`;
@@ -425,8 +454,9 @@ export async function POST(request: Request) {
                             </div>
                         `
                     });
+                    console.log(`📧 Email enviado a: ${studentData.correo}`);
                 } catch (emailError: any) {
-                    console.error('Error enviando email:', emailError);
+                    console.error('❌ Error enviando email:', emailError);
                 }
             }
 
@@ -440,13 +470,13 @@ export async function POST(request: Request) {
         }
 
         // Si no se encontró ningún QR válido
-        console.log(`QR '${qrData}' not found in any system.`);
+        console.log(`❌ QR no encontrado: ${cleanQrData}`);
         return NextResponse.json({ 
             message: "Código QR no reconocido o inválido." 
         }, { status: 404 });
 
     } catch (error: any) {
-        console.error("Fatal error in QR validation endpoint:", error);
+        console.error("❌ Fatal error in QR validation endpoint:", error);
         return NextResponse.json({ 
             message: "Ocurrió un error interno grave al validar el código QR.",
             details: error.message 

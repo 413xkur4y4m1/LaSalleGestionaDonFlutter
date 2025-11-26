@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firestore-operations-server';
 import * as admin from 'firebase-admin';
-import { randomBytes } from 'crypto';
 import nodemailer from 'nodemailer';
-
-// Función para generar código QR como Data URL
-function generateQRCodeDataURL(text: string, size: number = 200): string {
-  const encodedText = encodeURIComponent(text);
-  return `https://quickchart.io/qr?text=${encodedText}&size=${size}&margin=1`;
-}
 
 // Configurar transporter de Outlook
 const transporter = nodemailer.createTransport({
@@ -34,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   console.log("\n========================================");
-  console.log("🤖 SEND REMINDERS & PROCESS OVERDUE - INICIO");
+  console.log("🤖 PROCESS OVERDUE LOANS - INICIO");
   console.log(`⏰ ${new Date().toISOString()}`);
   console.log("========================================\n");
   
@@ -42,13 +35,11 @@ export async function GET(request: NextRequest) {
   const now = admin.firestore.Timestamp.now();
   const nowMillis = now.toMillis();
   
-  // Ventanas de tiempo
+  // 24 horas atrás
   const twentyFourHoursAgo = admin.firestore.Timestamp.fromMillis(nowMillis - (24 * 60 * 60 * 1000));
-  const oneDayAhead = admin.firestore.Timestamp.fromMillis(nowMillis + (24 * 60 * 60 * 1000));
   
   let stats = {
     adeudosCreados: 0,
-    qrGenerados: 0,
     emailsEnviados: 0,
     prestamosAnalizados: 0,
     errors: [] as string[]
@@ -72,14 +63,17 @@ export async function GET(request: NextRequest) {
       console.log(`👤 Procesando: ${studentData.nombre || studentDoc.id} (${studentEmail || 'sin email'})`);
 
       // ============================================
-      // PARTE 1: CONVERTIR EXPIRADOS A ADEUDOS
+      // CONVERTIR PRÉSTAMOS EXPIRADOS A ADEUDOS
+      // (Solo los que llevan más de 24h vencidos)
       // ============================================
       try {
         const expiredLoansSnapshot = await loansRef
           .where('estado', '==', 'expirado')
           .get();
         
-        // Filtrar manualmente por fecha (evita problemas de índices)
+        stats.prestamosAnalizados += expiredLoansSnapshot.size;
+        
+        // Filtrar manualmente por fecha (más de 24h vencidos)
         const expiredLoans = expiredLoansSnapshot.docs.filter(doc => {
           const loanData = doc.data();
           if (!loanData.fechaDevolucion) return false;
@@ -116,9 +110,10 @@ export async function GET(request: NextRequest) {
               // Generar código de adeudo
               const adeudoCodigo = `ADEU-${loanData.grupo || 'XXX'}-${String(Math.floor(Math.random() * 100000)).padStart(5, '0')}`;
               
-              // Crear adeudo
+              // Calcular precio ajustado
               const precioAjustado = loanData.precio_total || (loanData.cantidad * loanData.precio_unitario) || 0;
               
+              // Crear adeudo
               const adeudoData = {
                 codigo: adeudoCodigo,
                 nombreMaterial: loanData.nombreMaterial,
@@ -150,6 +145,9 @@ export async function GET(request: NextRequest) {
                 leida: false
               });
               
+              stats.adeudosCreados++;
+              console.log(`   ✅ Adeudo creado: ${adeudoCodigo}`);
+              
               // Enviar email de notificación de adeudo
               if (studentEmail && studentEmail.includes('@')) {
                 try {
@@ -158,174 +156,30 @@ export async function GET(request: NextRequest) {
                     to: studentEmail,
                     subject: `⚠️ Adeudo Generado - ${loanData.nombreMaterial}`,
                     html: `
-                      <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px;">
-                        <h2 style="color: #dc2626;">💰 Nuevo Adeudo Generado</h2>
-                        <p>Hola <strong>${studentData.nombre}</strong>,</p>
-                        
-                        <p>Se ha generado un adeudo porque no devolviste el material a tiempo:</p>
-                        
-                        <div style="background-color: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
-                          <p><strong>📦 Material:</strong> ${loanData.nombreMaterial}</p>
-                          <p><strong>🔢 Cantidad:</strong> ${loanData.cantidad}</p>
-                          <p><strong>💵 Monto a pagar:</strong> ${precioAjustado > 0 ? `$${precioAjustado.toFixed(2)} MXN` : 'Contacta al laboratorio'}</p>
-                          <p><strong>🔖 Código de adeudo:</strong> ${adeudoCodigo}</p>
-                          <p><strong>⏰ Fecha de vencimiento original:</strong> ${loanData.fechaDevolucion.toDate().toLocaleString('es-MX')}</p>
-                        </div>
-                        
-                        <p>Por favor, acércate al laboratorio para realizar el pago o devolver el material.</p>
-                        
-                        <p style="color: #6b7280; font-size: 12px; margin-top: 30px;">
-                          Este es un correo automático. Por favor no respondas a este mensaje.
-                        </p>
-                      </div>
-                    `,
-                  });
-                  
-                  console.log(`   📧 Email de adeudo enviado a: ${studentEmail}`);
-                  
-                } catch (emailError: any) {
-                  console.error(`   ❌ Error enviando email de adeudo:`, emailError.message);
-                  stats.errors.push(`Email adeudo ${studentEmail}: ${emailError.message}`);
-                }
-              }
-              
-              stats.adeudosCreados++;
-              console.log(`   ✅ Adeudo creado: ${adeudoCodigo}`);
-              
-            } catch (error: any) {
-              console.error(`   ❌ Error creando adeudo:`, error);
-              stats.errors.push(`Adeudo ${loanDoc.id}: ${error.message}`);
-            }
-          }
-        }
-      } catch (error: any) {
-        console.error(`   ❌ Error consultando préstamos expirados:`, error.message);
-        stats.errors.push(`Consulta expirados ${studentDoc.id}: ${error.message}`);
-      }
-
-      // ============================================
-      // PARTE 2: GENERAR QR PARA PRÓXIMOS A VENCER
-      // ============================================
-      try {
-        const activeLoansSnapshot = await loansRef
-          .where('estado', '==', 'activo')
-          .get();
-        
-        // Filtrar manualmente por rango de fechas
-        const upcomingLoans = activeLoansSnapshot.docs.filter(doc => {
-          const loanData = doc.data();
-          if (!loanData.fechaDevolucion) return false;
-          const devolucionMillis = loanData.fechaDevolucion.toMillis();
-          return devolucionMillis >= nowMillis && devolucionMillis <= oneDayAhead.toMillis();
-        });
-        
-        stats.prestamosAnalizados += activeLoansSnapshot.size;
-        
-        if (upcomingLoans.length > 0) {
-          console.log(`   ⏰ ${upcomingLoans.length} préstamos vencen en las próximas 24h`);
-          
-          for (const loanDoc of upcomingLoans) {
-            try {
-              const loanData = loanDoc.data();
-              
-              // Verificar si ya tiene QR generado
-              if (loanData.qrToken) {
-                console.log(`   ⏭️  QR ya generado para préstamo ${loanDoc.id}`);
-                continue;
-              }
-              
-              // Generar token único para QR
-              const qrToken = randomBytes(32).toString('hex');
-              const qrValidUntil = admin.firestore.Timestamp.fromMillis(
-                loanData.fechaDevolucion.toMillis() + (2 * 60 * 60 * 1000) // +2h después de vencimiento
-              );
-              
-              // URL del QR
-              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://tu-dominio.vercel.app';
-              const qrUrl = `${baseUrl}/devolucion/${qrToken}`;
-              
-              // Actualizar préstamo con info del QR
-              await loanDoc.ref.update({
-                qrToken: qrToken,
-                qrValidoHasta: qrValidUntil,
-                qrGenerado: admin.firestore.Timestamp.now()
-              });
-              
-              // Crear notificación con QR
-              await studentDoc.ref.collection('Notificaciones').add({
-                tipo: 'recordatorio',
-                prestamoId: loanDoc.id,
-                mensaje: `⏰ Tu préstamo de ${loanData.nombreMaterial} vence pronto. Usa el QR para devolverlo.`,
-                qrUrl: qrUrl,
-                enviado: true,
-                fechaEnvio: admin.firestore.Timestamp.now(),
-                canal: 'interno',
-                leida: false
-              });
-              
-              stats.qrGenerados++;
-              console.log(`   ✅ QR generado para: ${loanData.nombreMaterial}`);
-              
-              // Enviar email con QR
-              if (studentEmail && studentEmail.includes('@')) {
-                try {
-                  const fechaDevolucionFormateada = loanData.fechaDevolucion.toDate().toLocaleString('es-MX', {
-                    weekday: 'long',
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  });
-                  
-                  // Generar imagen QR
-                  const qrImageUrl = generateQRCodeDataURL(qrUrl, 300);
-                  
-                  await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
-                    to: studentEmail,
-                    subject: `⏰ Recordatorio: Tu préstamo vence pronto - ${loanData.nombreMaterial}`,
-                    html: `
                       <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
                         <div style="background-color: #dc2626; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
-                          <h2 style="color: white; margin: 0;">⏰ Recordatorio de Devolución</h2>
+                          <h2 style="color: white; margin: 0;">💰 Nuevo Adeudo Generado</h2>
                         </div>
                         
                         <div style="background-color: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px;">
                           <p>Hola <strong>${studentData.nombre}</strong>,</p>
                           
-                          <p>Tu préstamo de <strong>${loanData.nombreMaterial}</strong> vence pronto. ¡No olvides devolverlo a tiempo!</p>
+                          <p>Se ha generado un adeudo porque no devolviste el material a tiempo:</p>
                           
-                          <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                          <div style="background-color: #fee2e2; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #dc2626;">
                             <p style="margin: 5px 0;"><strong>📦 Material:</strong> ${loanData.nombreMaterial}</p>
                             <p style="margin: 5px 0;"><strong>🔢 Cantidad:</strong> ${loanData.cantidad}</p>
-                            <p style="margin: 5px 0;"><strong>📅 Fecha de devolución:</strong> ${fechaDevolucionFormateada}</p>
-                            <p style="margin: 5px 0;"><strong>🏷️ Código:</strong> ${loanData.codigo || loanDoc.id}</p>
-                          </div>
-                          
-                          <div style="background-color: white; padding: 25px; border-radius: 8px; margin: 20px 0; text-align: center; border: 3px solid #10b981;">
-                            <p style="margin-bottom: 15px; font-size: 16px;"><strong>📱 Tu Código QR de Devolución:</strong></p>
-                            
-                            <div style="background-color: #f3f4f6; padding: 20px; border-radius: 8px; display: inline-block;">
-                              <img src="${qrImageUrl}" alt="Código QR" style="max-width: 300px; width: 100%; height: auto; display: block;" />
-                            </div>
-                            
-                            <p style="font-size: 14px; color: #374151; margin: 15px 0;">
-                              Presenta este código en el laboratorio para devolver tu material
-                            </p>
-                            
-                            <a href="${qrUrl}" style="background-color: #dc2626; color: white; padding: 12px 25px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: bold; margin: 10px 0;">
-                              📱 Ver Código de Devolución
-                            </a>
-                            
-                            <p style="font-size: 11px; color: #6b7280; margin-top: 15px; padding: 10px; background-color: #f9fafb; border-radius: 4px; word-break: break-all; font-family: monospace;">
-                              ${qrUrl}
-                            </p>
+                            <p style="margin: 5px 0;"><strong>💵 Monto a pagar:</strong> ${precioAjustado > 0 ? `$${precioAjustado.toFixed(2)} MXN` : 'Contacta al laboratorio'}</p>
+                            <p style="margin: 5px 0;"><strong>🔖 Código de adeudo:</strong> ${adeudoCodigo}</p>
+                            <p style="margin: 5px 0;"><strong>⏰ Fecha de vencimiento original:</strong> ${loanData.fechaDevolucion.toDate().toLocaleString('es-MX')}</p>
                           </div>
                           
                           <div style="background-color: #dbeafe; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
                             <p style="margin: 0; font-size: 14px;">
-                              <strong>💡 Importante:</strong> Este código QR es válido hasta 2 horas después de la fecha de devolución. ¡Devuelve a tiempo para evitar adeudos!
+                              <strong>💡 Opciones:</strong><br/>
+                              • Devuelve el material físicamente en el laboratorio<br/>
+                              • Realiza el pago para liquidar el adeudo<br/>
+                              • Recibirás un formulario por correo para elegir tu opción
                             </p>
                           </div>
                           
@@ -339,39 +193,36 @@ export async function GET(request: NextRequest) {
                   });
                   
                   stats.emailsEnviados++;
-                  console.log(`   📧 Email enviado a: ${studentEmail}`);
+                  console.log(`   📧 Email de adeudo enviado a: ${studentEmail}`);
                   
                 } catch (emailError: any) {
-                  console.error(`   ❌ Error enviando email:`, emailError.message);
-                  stats.errors.push(`Email QR ${studentEmail}: ${emailError.message}`);
+                  console.error(`   ❌ Error enviando email de adeudo:`, emailError.message);
+                  stats.errors.push(`Email adeudo ${studentEmail}: ${emailError.message}`);
                 }
-              } else {
-                console.log(`   ⚠️  Estudiante sin email válido`);
               }
               
             } catch (error: any) {
-              console.error(`   ❌ Error generando QR:`, error);
-              stats.errors.push(`QR ${loanDoc.id}: ${error.message}`);
+              console.error(`   ❌ Error creando adeudo:`, error);
+              stats.errors.push(`Adeudo ${loanDoc.id}: ${error.message}`);
             }
           }
         } else {
-          console.log(`   ℹ️  No hay préstamos próximos a vencer (activos encontrados: ${activeLoansSnapshot.size})`);
+          console.log(`   ℹ️  No hay préstamos vencidos hace más de 24h`);
         }
       } catch (error: any) {
-        console.error(`   ❌ Error consultando préstamos activos:`, error.message);
-        stats.errors.push(`Consulta activos ${studentDoc.id}: ${error.message}`);
+        console.error(`   ❌ Error consultando préstamos expirados:`, error.message);
+        stats.errors.push(`Consulta expirados ${studentDoc.id}: ${error.message}`);
       }
       
       console.log(''); // Línea en blanco
     }
 
     console.log("========================================");
-    console.log("✅ SEND REMINDERS - FINALIZADO");
+    console.log("✅ PROCESS OVERDUE - FINALIZADO");
     console.log("========================================");
     console.log(`👥 Estudiantes procesados: ${studentsSnapshot.size}`);
-    console.log(`📋 Préstamos activos analizados: ${stats.prestamosAnalizados}`);
+    console.log(`📋 Préstamos analizados: ${stats.prestamosAnalizados}`);
     console.log(`💰 Adeudos creados: ${stats.adeudosCreados}`);
-    console.log(`🎫 QR generados: ${stats.qrGenerados}`);
     console.log(`📧 Emails enviados: ${stats.emailsEnviados}`);
     if (stats.errors.length > 0) {
       console.error(`⚠️ Errores encontrados: ${stats.errors.length}`);
@@ -389,7 +240,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error("\n❌❌❌ [CRON | send-reminders ERROR CRÍTICO] ❌❌❌");
+    console.error("\n❌❌❌ [CRON | process-overdue ERROR CRÍTICO] ❌❌❌");
     console.error("Error:", error.message);
     console.error("Stack:", error.stack);
     console.error("========================================\n");
