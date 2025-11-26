@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -60,7 +59,7 @@ const AdeudosPage = () => {
       const fetchDebts = async () => {
         try {
           setIsLoading(true);
-          const response = await fetch(`/api/adeudos?studentUid=${session.user.id}`);
+          const response = await fetch(`/api/debts?studentUid=${session.user.id}`);
           if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.message || 'No se pudieron cargar los adeudos.');
