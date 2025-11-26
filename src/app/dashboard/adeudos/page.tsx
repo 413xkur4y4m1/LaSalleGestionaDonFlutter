@@ -4,19 +4,32 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { LoaderCircle, ServerCrash, AlertTriangle, ShieldAlert } from 'lucide-react';
 
-// Tipo de dato para un Adeudo
+// Tipo de dato para un Adeudo - ACTUALIZADO para coincidir con el endpoint
 interface Debt {
   id: string;
+  codigo: string;
   nombreMaterial: string;
   cantidad: number;
-  fechaVencimiento: string;
-  codigo: string;
-  precio_total: number;
+  precio_unitario: number;
+  precio_ajustado: number;
+  moneda: string;
+  estado: string;
+  tipo: string;
+  fechaVencimiento: string | null;
+  grupo: string;
+  prestamoOriginal: string | null;
 }
 
 // --- Componente de Tarjeta para mostrar un Adeudo ---
 const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' });
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('es-MX', { 
+      day: '2-digit', 
+      month: 'long', 
+      year: 'numeric' 
+    });
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-md border border-amber-300 hover:shadow-lg transition-shadow duration-300 overflow-hidden">
@@ -25,19 +38,31 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
             <div>
                 <h3 className="font-bold text-lg text-amber-900">{debt.nombreMaterial}</h3>
                 <p className="text-sm text-gray-500 font-mono">{debt.codigo}</p>
+                <p className="text-sm text-gray-600 mt-1">Cantidad: {debt.cantidad}</p>
+                {debt.grupo && <p className="text-sm text-gray-600">Grupo: {debt.grupo}</p>}
             </div>
             <div className="text-right">
-                <p className="text-sm text-gray-600">Monto</p>
-                {/* El precio se formatea como moneda local */}
-                <p className="font-bold text-xl text-amber-600">{debt.precio_total.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}</p>
+                <p className="text-sm text-gray-600">Monto Total</p>
+                <p className="font-bold text-xl text-amber-600">
+                  {debt.precio_ajustado.toLocaleString('es-MX', { 
+                    style: 'currency', 
+                    currency: debt.moneda || 'MXN' 
+                  })}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Unitario: {debt.precio_unitario.toLocaleString('es-MX', { 
+                    style: 'currency', 
+                    currency: debt.moneda || 'MXN' 
+                  })}
+                </p>
             </div>
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center text-sm">
             <div>
                 <p className="font-semibold text-gray-700">Fecha de Vencimiento:</p>
                 <p className="text-red-600 font-bold">{formatDate(debt.fechaVencimiento)}</p>
+                <p className="text-xs text-gray-500 mt-1 capitalize">Tipo: {debt.tipo}</p>
             </div>
-            {/* Aquí se podría añadir un botón para generar el formulario de pago */}
             <button className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-xs transition-colors">
                 Generar Formulario
             </button>
@@ -59,14 +84,22 @@ const AdeudosPage = () => {
       const fetchDebts = async () => {
         try {
           setIsLoading(true);
+          console.log('Fetching debts for user:', session.user.id);
+          
           const response = await fetch(`/api/adeudos?studentUid=${session.user.id}`);
+          
+          console.log('Response status:', response.status);
+          
           if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({ message: 'Error desconocido' }));
             throw new Error(errorData.message || 'No se pudieron cargar los adeudos.');
           }
+          
           const data: Debt[] = await response.json();
+          console.log('Adeudos recibidos:', data);
           setDebts(data);
         } catch (err: any) {
+          console.error('Error fetching debts:', err);
           setError(err.message);
         } finally {
           setIsLoading(false);
@@ -74,6 +107,10 @@ const AdeudosPage = () => {
       };
 
       fetchDebts();
+    } else {
+      console.log('No session or user ID available');
+      setIsLoading(false);
+      setError('No hay sesión activa');
     }
   }, [session]);
 
