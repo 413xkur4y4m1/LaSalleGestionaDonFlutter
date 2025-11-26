@@ -39,7 +39,6 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
                 <h3 className="font-bold text-lg text-amber-900">{debt.nombreMaterial}</h3>
                 <p className="text-sm text-gray-500 font-mono">{debt.codigo}</p>
                 <p className="text-sm text-gray-600 mt-1">Cantidad: {debt.cantidad}</p>
-                {debt.grupo && <p className="text-sm text-gray-600">Grupo: {debt.grupo}</p>}
             </div>
             <div className="text-right">
                 <p className="text-sm text-gray-600">Monto Total</p>
@@ -57,15 +56,10 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
                 </p>
             </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center text-sm">
-            <div>
-                <p className="font-semibold text-gray-700">Fecha de Vencimiento:</p>
-                <p className="text-red-600 font-bold">{formatDate(debt.fechaVencimiento)}</p>
-                <p className="text-xs text-gray-500 mt-1 capitalize">Tipo: {debt.tipo}</p>
-            </div>
-            <button className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg text-xs transition-colors">
-                Generar Formulario
-            </button>
+        <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="font-semibold text-gray-700 text-sm">Fecha de Vencimiento:</p>
+            <p className="text-red-600 font-bold">{formatDate(debt.fechaVencimiento)}</p>
+            <p className="text-xs text-gray-500 mt-2 capitalize">Tipo: {debt.tipo}</p>
         </div>
       </div>
     </div>

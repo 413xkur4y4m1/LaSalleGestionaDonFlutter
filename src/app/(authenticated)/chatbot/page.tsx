@@ -14,7 +14,6 @@ import ReturnDatePicker from '@/components/molecules/ReturnDatePicker';
 import { Button } from '@/components/ui/button';
 
 // --- Tipos ---
-// Extender Material para incluir campos de Firebase Realtime
 interface MaterialCompleto extends Material {
   cantidad: number;
   precio_unitario: number;
@@ -72,7 +71,7 @@ const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({ loanCode, materialNombre,
   );
 };
 
-// --- NUEVO: Selector de Cantidad Mejorado ---
+// --- Selector de Cantidad ---
 interface QuantitySelectorProps {
   material: MaterialCompleto;
   onConfirm: (quantity: number) => void;
@@ -86,7 +85,6 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     
-    // Permitir campo vacío temporalmente
     if (value === '') {
       setQuantity(0);
       setError('');
@@ -95,13 +93,11 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm
 
     const numValue = parseInt(value, 10);
     
-    // Validar que sea un número
     if (isNaN(numValue)) {
       setError('Ingresa un número válido');
       return;
     }
 
-    // Validar rango
     if (numValue < 1) {
       setError('Mínimo 1 unidad');
       setQuantity(1);
@@ -142,7 +138,6 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm
           Disponibles: <span className="font-bold text-green-600">{material.cantidad}</span>
         </div>
 
-        {/* Input limpio sin botones */}
         <div className="flex items-center justify-center">
           <input
             type="text"
@@ -174,6 +169,68 @@ const QuantitySelector: React.FC<QuantitySelectorProps> = ({ material, onConfirm
             Confirmar
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Vista de Formulario de Adeudo ---
+interface DebtFormViewProps {
+  formulario: {
+    formId: string;
+    pregunta: string;
+    opciones: string[];
+    nombreMaterial?: string;
+  };
+  debtId: string;
+  onSubmit: (formId: string, respuesta: string, debtId: string) => void;
+  onCancel: () => void;
+}
+
+const DebtFormView: React.FC<DebtFormViewProps> = ({ formulario, debtId, onSubmit, onCancel }) => {
+  const [selectedOption, setSelectedOption] = useState<string>('');
+
+  const handleSubmit = () => {
+    if (!selectedOption) return;
+    onSubmit(formulario.formId, selectedOption, debtId);
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-md max-w-md mx-auto">
+      <h3 className="font-semibold text-gray-800 mb-4 text-center">
+        {formulario.pregunta}
+      </h3>
+      
+      <div className="flex flex-col gap-2 mb-4">
+        {formulario.opciones.map((opcion, index) => (
+          <button
+            key={index}
+            onClick={() => setSelectedOption(opcion)}
+            className={`p-3 text-left rounded-lg border-2 transition-all ${
+              selectedOption === opcion
+                ? 'border-red-500 bg-red-50 text-red-700 font-medium'
+                : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            {opcion}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex gap-2">
+        <button
+          onClick={onCancel}
+          className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={!selectedOption}
+          className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:text-gray-500 text-white rounded-lg font-medium transition-colors"
+        >
+          Enviar
+        </button>
       </div>
     </div>
   );
@@ -218,7 +275,7 @@ const Gastrobot = () => {
     setMessages(prev => prev.filter(msg => !msg.component));
   };
 
-  // --- MANEJADORES DE FLUJO ---
+  // --- MANEJADORES DE FLUJO DE PRÉSTAMOS ---
   const handleMaterialSelected = (material: MaterialCompleto) => {
     setShowSuggestions(false);
     removeComponentFromChat();
@@ -256,7 +313,6 @@ const Gastrobot = () => {
     setIsLoading(true);
 
     try {
-      // ⭐ ASEGURAR QUE SE ENVÍEN LOS PRECIOS CORRECTAMENTE
       const material = finalLoanState.material!;
       
       const body = {
@@ -267,12 +323,9 @@ const Gastrobot = () => {
         cantidad: finalLoanState.quantity,
         fechaDevolucion: date.toISOString(),
         grupo: (session?.user as any)?.grupo,
-        // ⭐ AGREGAR PRECIOS EXPLÍCITAMENTE
         precio_unitario: material.precio_unitario || 0,
         precio_ajustado: material.precio_ajustado || 0,
       };
-
-      console.log('📦 Datos del préstamo:', body); // Debug
 
       if (!body.studentUid || !body.materialId || !body.materialNombre || !body.cantidad) {
         throw new Error("Faltan detalles del material o de la fecha.");
@@ -322,6 +375,81 @@ const Gastrobot = () => {
     setShowSuggestions(true);
   };
 
+  // --- MANEJADORES DE FLUJO DE ADEUDOS ---
+  const handlePayDebt = async (debtId: string, prestamoOriginal: string) => {
+    setShowSuggestions(false);
+    removeComponentFromChat();
+    
+    addMessageToChat("Quiero pagar este adeudo.", 'user');
+    const loadingId = addMessageToChat("Consultando tu formulario de adeudo...", 'model');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch(`/api/formularios?studentUid=${session?.user.id}&prestamoId=${prestamoOriginal}`);
+      const data = await res.json();
+
+      removeMessageFromChat(loadingId);
+
+      if (!res.ok) throw new Error(data.message || 'No pude encontrar el formulario.');
+
+      if (data.formulario) {
+        addMessageToChat("Encontré tu formulario. Por favor complétalo para proceder con el pago:", 'model');
+        addMessageToChat(null, 'model', 
+          <DebtFormView 
+            formulario={data.formulario} 
+            debtId={debtId}
+            onSubmit={handleFormSubmit}
+            onCancel={handleFlowCancelled}
+          />
+        );
+      } else {
+        throw new Error('No se encontró un formulario asociado a este adeudo.');
+      }
+
+    } catch (error) {
+      removeMessageFromChat(loadingId);
+      addMessageToChat(`Lo siento, hubo un error: ${(error as Error).message}`, 'model');
+      setShowSuggestions(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleFormSubmit = async (formId: string, respuesta: string, debtId: string) => {
+    removeComponentFromChat();
+    addMessageToChat(`He seleccionado: "${respuesta}"`, 'user');
+    const loadingId = addMessageToChat("Procesando tu respuesta...", 'model');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch('/api/formularios', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentUid: session?.user.id,
+          formId,
+          respuesta,
+          debtId
+        })
+      });
+
+      const data = await res.json();
+      removeMessageFromChat(loadingId);
+
+      if (!res.ok) throw new Error(data.message || 'No pude procesar tu respuesta.');
+
+      addMessageToChat("¡Listo! Tu respuesta ha sido registrada. Un administrador revisará tu caso pronto.", 'model');
+      setShowSuggestions(true);
+
+    } catch (error) {
+      removeMessageFromChat(loadingId);
+      addMessageToChat(`Error: ${(error as Error).message}`, 'model');
+      setShowSuggestions(true);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // --- ENVÍO PRINCIPAL ---
   const handleSend = async (messageText?: string) => {
     const textToSend = messageText || input;
@@ -354,7 +482,12 @@ const Gastrobot = () => {
 
       } else if (textToSend === '💰 Consultar adeudos') {
         addMessageToChat("Aquí tienes un resumen de tus adeudos:", 'model');
-        addMessageToChat(null, 'model', <DebtListView studentUid={session.user.id} />);
+        addMessageToChat(null, 'model', 
+          <DebtListView 
+            studentUid={session.user.id} 
+            onPayDebt={handlePayDebt}
+          />
+        );
 
       } else {
         isGenkitCall = true;

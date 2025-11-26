@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   }
 
   console.log("\n========================================");
-  console.log("🤖 PROCESS OVERDUE LOANS - INICIO");
+  console.log("🤖 PROCESS OVERDUE & SEND REMINDERS - INICIO");
   console.log(`⏰ ${new Date().toISOString()}`);
   console.log("========================================\n");
   
@@ -35,11 +35,13 @@ export async function GET(request: NextRequest) {
   const now = admin.firestore.Timestamp.now();
   const nowMillis = now.toMillis();
   
-  // 24 horas atrás
+  // Ventanas de tiempo
   const twentyFourHoursAgo = admin.firestore.Timestamp.fromMillis(nowMillis - (24 * 60 * 60 * 1000));
+  const oneDayAhead = admin.firestore.Timestamp.fromMillis(nowMillis + (24 * 60 * 60 * 1000));
   
   let stats = {
     adeudosCreados: 0,
+    recordatoriosEnviados: 0,
     emailsEnviados: 0,
     prestamosAnalizados: 0,
     errors: [] as string[]
@@ -214,15 +216,145 @@ export async function GET(request: NextRequest) {
         stats.errors.push(`Consulta expirados ${studentDoc.id}: ${error.message}`);
       }
       
-      console.log(''); // Línea en blanco
+      // ============================================
+      // PARTE 2: ENVIAR RECORDATORIOS (SIN QR)
+      // ============================================
+      try {
+        const activeLoansSnapshot = await loansRef
+          .where('estado', '==', 'activo')
+          .get();
+        
+        // Filtrar manualmente por rango de fechas (próximos a vencer en 24h)
+        const upcomingLoans = activeLoansSnapshot.docs.filter(doc => {
+          const loanData = doc.data();
+          if (!loanData.fechaDevolucion) return false;
+          const devolucionMillis = loanData.fechaDevolucion.toMillis();
+          return devolucionMillis >= nowMillis && devolucionMillis <= oneDayAhead.toMillis();
+        });
+        
+        stats.prestamosAnalizados += activeLoansSnapshot.size;
+        
+        if (upcomingLoans.length > 0) {
+          console.log(`   ⏰ ${upcomingLoans.length} préstamos vencen en las próximas 24h`);
+          
+          for (const loanDoc of upcomingLoans) {
+            try {
+              const loanData = loanDoc.data();
+              
+              // Verificar si ya se envió recordatorio (para no spam)
+              if (loanData.recordatorioEnviado) {
+                console.log(`   ⏭️  Recordatorio ya enviado para préstamo ${loanDoc.id}`);
+                continue;
+              }
+              
+              // Marcar que ya se envió recordatorio
+              await loanDoc.ref.update({
+                recordatorioEnviado: true,
+                fechaRecordatorio: admin.firestore.Timestamp.now()
+              });
+              
+              // Crear notificación
+              await studentDoc.ref.collection('Notificaciones').add({
+                tipo: 'recordatorio',
+                prestamoId: loanDoc.id,
+                mensaje: `⏰ Tu préstamo de ${loanData.nombreMaterial} vence pronto. No olvides devolverlo.`,
+                enviado: true,
+                fechaEnvio: admin.firestore.Timestamp.now(),
+                canal: 'interno',
+                leida: false
+              });
+              
+              console.log(`   ✅ Recordatorio creado para: ${loanData.nombreMaterial}`);
+              stats.recordatoriosEnviados++;
+              
+              // Enviar email de recordatorio simple
+              if (studentEmail && studentEmail.includes('@')) {
+                try {
+                  const fechaDevolucionFormateada = loanData.fechaDevolucion.toDate().toLocaleString('es-MX', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                  
+                  await transporter.sendMail({
+                    from: process.env.EMAIL_USER,
+                    to: studentEmail,
+                    subject: `⏰ Recordatorio: Tu préstamo vence pronto - ${loanData.nombreMaterial}`,
+                    html: `
+                      <div style="font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+                        <div style="background-color: #f59e0b; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+                          <h2 style="color: white; margin: 0;">⏰ Recordatorio de Devolución</h2>
+                        </div>
+                        
+                        <div style="background-color: #f9fafb; padding: 20px; border-radius: 0 0 8px 8px;">
+                          <p>Hola <strong>${studentData.nombre}</strong>,</p>
+                          
+                          <p>Este es un recordatorio de que tu préstamo vence pronto. ¡No olvides devolverlo a tiempo para evitar adeudos!</p>
+                          
+                          <div style="background-color: #fef3c7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #f59e0b;">
+                            <p style="margin: 5px 0;"><strong>📦 Material:</strong> ${loanData.nombreMaterial}</p>
+                            <p style="margin: 5px 0;"><strong>🔢 Cantidad:</strong> ${loanData.cantidad}</p>
+                            <p style="margin: 5px 0;"><strong>📅 Fecha de devolución:</strong> ${fechaDevolucionFormateada}</p>
+                            <p style="margin: 5px 0;"><strong>🏷️ Código:</strong> ${loanData.codigo || loanDoc.id}</p>
+                          </div>
+                          
+                          <div style="background-color: #dbeafe; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+                            <p style="margin: 0; font-size: 14px;">
+                              <strong>💡 Recuerda:</strong> Usa el código QR verde que recibiste cuando solicitaste el préstamo para devolver el material en el laboratorio.
+                            </p>
+                          </div>
+                          
+                          <div style="text-align: center; margin: 30px 0;">
+                            <p style="font-size: 14px; color: #6b7280;">
+                              Acércate al laboratorio con tu código QR de devolución<br/>
+                              para completar la devolución.
+                            </p>
+                          </div>
+                          
+                          <p style="color: #6b7280; font-size: 12px; margin-top: 30px; text-align: center; border-top: 1px solid #e5e7eb; padding-top: 15px;">
+                            Este es un correo automático del Sistema de Préstamos de Laboratorio.<br/>
+                            Por favor no respondas a este mensaje.
+                          </p>
+                        </div>
+                      </div>
+                    `,
+                  });
+                  
+                  stats.emailsEnviados++;
+                  console.log(`   📧 Email de recordatorio enviado a: ${studentEmail}`);
+                  
+                } catch (emailError: any) {
+                  console.error(`   ❌ Error enviando email:`, emailError.message);
+                  stats.errors.push(`Email recordatorio ${studentEmail}: ${emailError.message}`);
+                }
+              } else {
+                console.log(`   ⚠️  Estudiante sin email válido`);
+              }
+              
+            } catch (error: any) {
+              console.error(`   ❌ Error enviando recordatorio:`, error);
+              stats.errors.push(`Recordatorio ${loanDoc.id}: ${error.message}`);
+            }
+          }
+        } else {
+          console.log(`   ℹ️  No hay préstamos próximos a vencer (activos encontrados: ${activeLoansSnapshot.size})`);
+        }
+      } catch (error: any) {
+        console.error(`   ❌ Error consultando préstamos activos:`, error.message);
+        stats.errors.push(`Consulta activos ${studentDoc.id}: ${error.message}`);
+      }
     }
 
     console.log("========================================");
-    console.log("✅ PROCESS OVERDUE - FINALIZADO");
+    console.log("✅ PROCESS OVERDUE & REMINDERS - FINALIZADO");
     console.log("========================================");
     console.log(`👥 Estudiantes procesados: ${studentsSnapshot.size}`);
     console.log(`📋 Préstamos analizados: ${stats.prestamosAnalizados}`);
     console.log(`💰 Adeudos creados: ${stats.adeudosCreados}`);
+    console.log(`⏰ Recordatorios enviados: ${stats.recordatoriosEnviados}`);
     console.log(`📧 Emails enviados: ${stats.emailsEnviados}`);
     if (stats.errors.length > 0) {
       console.error(`⚠️ Errores encontrados: ${stats.errors.length}`);

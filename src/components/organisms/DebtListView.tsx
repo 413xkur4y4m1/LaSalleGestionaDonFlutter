@@ -21,12 +21,19 @@ interface Adeudo {
   prestamoOriginal: string | null;
 }
 
+// ⭐ AGREGAR onPayDebt A LA INTERFAZ
 interface DebtListViewProps {
-  studentUid: string; // UID del estudiante autenticado
+  studentUid: string;
+  onPayDebt?: (debtId: string, prestamoOriginal: string) => void;
 }
 
 // --- SUB-COMPONENTE: TARJETA DE ADEUDO ---
-const DebtCard: React.FC<{ debt: Adeudo }> = ({ debt }) => {
+interface DebtCardProps {
+  debt: Adeudo;
+  onPayDebt?: (debtId: string, prestamoOriginal: string) => void;
+}
+
+const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
   const totalAdeudo = debt.precio_ajustado * debt.cantidad;
   
   const formattedDate = debt.fechaVencimiento 
@@ -43,6 +50,15 @@ const DebtCard: React.FC<{ debt: Adeudo }> = ({ debt }) => {
     perdida: { icon: '❌', texto: 'Material perdido' },
     vencimiento: { icon: '⏰', texto: 'No devuelto a tiempo' }
   }[debt.tipo] || { icon: '📦', texto: 'Adeudo' };
+
+  const handlePayClick = () => {
+    if (onPayDebt && debt.prestamoOriginal) {
+      onPayDebt(debt.id, debt.prestamoOriginal);
+    } else {
+      // Fallback si no hay callback
+      alert(`Procesando pago para: ${debt.codigo}`);
+    }
+  };
 
   return (
     <div className="bg-white border border-yellow-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -97,10 +113,7 @@ const DebtCard: React.FC<{ debt: Adeudo }> = ({ debt }) => {
       <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
         <button 
           className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
-          onClick={() => {
-            // Aquí puedes agregar la lógica para procesar el pago
-            alert(`Procesando pago para: ${debt.codigo}`);
-          }}
+          onClick={handlePayClick}
         >
           <CreditCard className="h-4 w-4" />
           <span>Pagar ahora</span>
@@ -111,7 +124,7 @@ const DebtCard: React.FC<{ debt: Adeudo }> = ({ debt }) => {
 };
 
 // --- COMPONENTE PRINCIPAL ---
-const DebtListView: React.FC<DebtListViewProps> = ({ studentUid }) => {
+const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) => {
   const [adeudos, setAdeudos] = useState<Adeudo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -253,7 +266,7 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid }) => {
 
       {/* Lista de adeudos */}
       {adeudos.map(debt => (
-        <DebtCard key={debt.id} debt={debt} />
+        <DebtCard key={debt.id} debt={debt} onPayDebt={onPayDebt} />
       ))}
 
       {/* Nota informativa */}
