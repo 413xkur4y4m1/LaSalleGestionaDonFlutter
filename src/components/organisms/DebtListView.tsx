@@ -19,18 +19,19 @@ interface Adeudo {
   fechaVencimiento: string | null;
   grupo: string;
   prestamoOriginal: string | null;
+  formularioId?: string; // ⭐ AGREGADO
 }
 
-// ⭐ AGREGAR onPayDebt A LA INTERFAZ
+// ⭐ CAMBIAR LA INTERFAZ
 interface DebtListViewProps {
   studentUid: string;
-  onPayDebt?: (debtId: string, prestamoOriginal: string) => void;
+  onPayDebt?: (debtId: string, formId: string) => void; // ⭐ Ahora recibe formId
 }
 
 // --- SUB-COMPONENTE: TARJETA DE ADEUDO ---
 interface DebtCardProps {
   debt: Adeudo;
-  onPayDebt?: (debtId: string, prestamoOriginal: string) => void;
+  onPayDebt?: (debtId: string, formId: string) => void; // ⭐ Ahora recibe formId
 }
 
 const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
@@ -52,11 +53,18 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
   }[debt.tipo] || { icon: '📦', texto: 'Adeudo' };
 
   const handlePayClick = () => {
-    if (onPayDebt && debt.prestamoOriginal) {
-      onPayDebt(debt.id, debt.prestamoOriginal);
-    } else {
-      // Fallback si no hay callback
-      alert(`Procesando pago para: ${debt.codigo}`);
+    // ⭐ OPCIÓN 1: Si el adeudo tiene formularioId
+    if (onPayDebt && debt.formularioId) {
+      onPayDebt(debt.id, debt.formularioId);
+    } 
+    // ⭐ OPCIÓN 2: Si no tiene formularioId, usar prestamoOriginal como fallback
+    else if (onPayDebt && debt.prestamoOriginal) {
+      // Construir formId basado en prestamoOriginal
+      const formId = `form_${debt.prestamoOriginal}`;
+      onPayDebt(debt.id, formId);
+    } 
+    else {
+      alert(`No se encontró formulario para este adeudo: ${debt.codigo}`);
     }
   };
 
@@ -184,6 +192,7 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) =>
             fechaVencimiento,
             grupo: data.grupo || '',
             prestamoOriginal: data.prestamoOriginal || null,
+            formularioId: data.formularioId || data.formId || null, // ⭐ AGREGADO
           };
         });
 
@@ -272,8 +281,8 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) =>
       {/* Nota informativa */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
         <p className="text-sm text-blue-800">
-          <strong>💡 Nota:</strong> Para realizar el pago, acude a la coordinación 
-          de tu facultad con tu número de estudiante y el código del adeudo.
+          <strong>💡 Nota:</strong> Haz clic en "Pagar ahora" para completar el 
+          formulario de pago y resolver tu adeudo.
         </p>
       </div>
     </div>
