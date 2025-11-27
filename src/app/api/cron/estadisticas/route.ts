@@ -1,8 +1,8 @@
 // app/api/cron/estadisticas/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { ai, generateStatisticalAnalysis } from '@/lib/genkit';
+import { collection, getDocs, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+import { generateStatisticalAnalysis } from '@/lib/genkit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -17,6 +17,7 @@ interface EstudianteData {
   pagados: any[];
 }
 
+// --- Recopilar datos de Firestore ---
 async function recopilarDatos() {
   const estudiantesSnapshot = await getDocs(collection(db, 'Estudiantes'));
   const todosLosDatos: EstudianteData[] = [];
@@ -25,7 +26,6 @@ async function recopilarDatos() {
     const uid = estudianteDoc.id;
     const datosEstudiante = estudianteDoc.data();
 
-    // Obtener subcolecciones
     const prestamosSnap = await getDocs(collection(db, `Estudiantes/${uid}/Prestamos`));
     const adeudosSnap = await getDocs(collection(db, `Estudiantes/${uid}/Adeudos`));
     const completadosSnap = await getDocs(collection(db, `Estudiantes/${uid}/Completados`));
@@ -45,19 +45,17 @@ async function recopilarDatos() {
   return todosLosDatos;
 }
 
+// --- Calcular estadísticas básicas ---
 function calcularEstadisticas(datos: EstudianteData[]) {
-  // Material más solicitado
   const materialCount: Record<string, number> = {};
   const materialPerdido: Record<string, { count: number; tipo: string }> = {};
   const estudianteScore: Record<string, { nombre: string; grupo: string; completados: number; adeudos: number; score: number }> = {};
 
   datos.forEach(estudiante => {
-    // Contar préstamos
     estudiante.prestamos.forEach(p => {
       materialCount[p.nombreMaterial] = (materialCount[p.nombreMaterial] || 0) + 1;
     });
 
-    // Contar adeudos
     estudiante.adeudos.forEach(a => {
       if (!materialPerdido[a.nombreMaterial]) {
         materialPerdido[a.nombreMaterial] = { count: 0, tipo: a.tipo || 'desconocido' };
@@ -65,10 +63,9 @@ function calcularEstadisticas(datos: EstudianteData[]) {
       materialPerdido[a.nombreMaterial].count++;
     });
 
-    // Score del estudiante
     const completados = estudiante.completados.length;
     const adeudos = estudiante.adeudos.length;
-    const score = completados - (adeudos * 2); // Penalizar más los adeudos
+    const score = completados - (adeudos * 2);
 
     estudianteScore[estudiante.uid] = {
       nombre: estudiante.nombre,
@@ -79,24 +76,20 @@ function calcularEstadisticas(datos: EstudianteData[]) {
     };
   });
 
-  // Top 5 materiales más solicitados
   const topMateriales = Object.entries(materialCount)
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5)
     .map(([material, cantidad]) => ({ material, cantidad }));
 
-  // Top 5 materiales más perdidos
   const topPerdidos = Object.entries(materialPerdido)
     .sort(([, a], [, b]) => b.count - a.count)
     .slice(0, 5)
     .map(([material, data]) => ({ material, cantidad: data.count, tipo: data.tipo }));
 
-  // Top 5 mejores estudiantes
   const topEstudiantes = Object.values(estudianteScore)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
-  // Top 5 peores estudiantes
   const peoresEstudiantes = Object.values(estudianteScore)
     .sort((a, b) => a.score - b.score)
     .slice(0, 5);
@@ -113,9 +106,9 @@ function calcularEstadisticas(datos: EstudianteData[]) {
   };
 }
 
+// --- Endpoint GET para cron ---
 export async function GET(req: NextRequest) {
   try {
-    // Verificar que sea el cron job
     const authHeader = req.headers.get('authorization');
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -123,39 +116,58 @@ export async function GET(req: NextRequest) {
 
     console.log('🤖 Iniciando análisis estadístico automático...');
 
-    // 1. Recopilar datos
     const todosLosDatos = await recopilarDatos();
     console.log(`📊 Datos recopilados de ${todosLosDatos.length} estudiantes`);
 
-    // 2. Calcular estadísticas
     const estadisticas = calcularEstadisticas(todosLosDatos);
 
-    // 3. Generar análisis con IA
-    console.log('🧠 Generando análisis con IA...');
-    const analisisIA = await generateStatisticalAnalysis({
-      prestamos: todosLosDatos.flatMap(e => e.prestamos),
-      adeudos: todosLosDatos.flatMap(e => e.adeudos),
-      completados: todosLosDatos.flatMap(e => e.completados),
-      pagados: todosLosDatos.flatMap(e => e.pagados),
-    });
+    // --- Verificar si ha pasado 24h para análisis IA ---
+    const reporteRef = doc(db, 'Estadisticas', 'reporte_actual');
+    const reporteSnap = await getDoc(reporteRef);
+    const ultimaActualizacion = reporteSnap.exists() ? (reporteSnap.data().ultimaActualizacion?.toDate?.() || 0) : 0;
+    const ahora = Date.now();
+    const DIAS_24 = 24 * 60 * 60 * 1000;
 
-    const analisisTexto = analisisIA.text;
-    let analisisJSON;
-    try {
-      analisisJSON = JSON.parse(analisisTexto);
-    } catch {
-      analisisJSON = {
-        resumen_ejecutivo: analisisTexto,
-        insights: [],
-        predicciones: [],
-        recomendaciones: [],
-        alertas: [],
-        tendencias: [],
-      };
+    let analisisJSON = reporteSnap.exists() ? reporteSnap.data().analisisIA || null : null;
+
+    if (!analisisJSON || ahora - ultimaActualizacion > DIAS_24) {
+      console.log('🧠 Generando análisis con IA (cada 24h)...');
+      try {
+        const analisisIA = await generateStatisticalAnalysis({
+          prestamos: todosLosDatos.flatMap(e => e.prestamos),
+          adeudos: todosLosDatos.flatMap(e => e.adeudos),
+          completados: todosLosDatos.flatMap(e => e.completados),
+          pagados: todosLosDatos.flatMap(e => e.pagados),
+        });
+
+        const analisisTexto = analisisIA.text;
+        try {
+          analisisJSON = JSON.parse(analisisTexto);
+        } catch {
+          analisisJSON = {
+            resumen_ejecutivo: analisisTexto,
+            insights: [],
+            predicciones: [],
+            recomendaciones: [],
+            alertas: [],
+            tendencias: [],
+          };
+        }
+      } catch (error: any) {
+        console.error('❌ Error generando análisis IA:', error);
+        analisisJSON = {
+          resumen_ejecutivo: 'Error generando análisis IA',
+          insights: [],
+          predicciones: [],
+          recomendaciones: [],
+          alertas: [],
+          tendencias: [],
+        };
+      }
     }
 
-    // 4. Guardar en Firestore
-    await setDoc(doc(db, 'Estadisticas', 'reporte_actual'), {
+    // --- Guardar en Firestore ---
+    await setDoc(reporteRef, {
       ...estadisticas,
       analisisIA: analisisJSON,
       ultimaActualizacion: serverTimestamp(),
