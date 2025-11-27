@@ -1,3 +1,4 @@
+// /home/user/studio/src/app/api/admin/validate-qr/route.ts
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { adminDb } from '@/lib/firebase-admin';

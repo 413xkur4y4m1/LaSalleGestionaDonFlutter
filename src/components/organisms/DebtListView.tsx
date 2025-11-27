@@ -22,16 +22,16 @@ interface Adeudo {
   formularioId?: string; // ⭐ AGREGADO
 }
 
-// ⭐ CAMBIAR LA INTERFAZ
+// ⭐ CAMBIAR LA INTERFAZ DE NUEVO
 interface DebtListViewProps {
   studentUid: string;
-  onPayDebt?: (debtId: string, formId: string) => void; // ⭐ Ahora recibe formId
+  onPayDebt?: (debtId: string, prestamoOriginal: string) => void; // ⭐ Volver a prestamoOriginal
 }
 
 // --- SUB-COMPONENTE: TARJETA DE ADEUDO ---
 interface DebtCardProps {
   debt: Adeudo;
-  onPayDebt?: (debtId: string, formId: string) => void; // ⭐ Ahora recibe formId
+  onPayDebt?: (debtId: string, prestamoOriginal: string) => void; // ⭐ Volver a prestamoOriginal
 }
 
 const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
