@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from 'sonner';
-import { LoaderCircle, School, ArrowLeft } from 'lucide-react';
+import { LoaderCircle, ArrowLeft } from 'lucide-react';
 
 // --- Esquemas de Validación ---
 const stepOneSchema = z.object({
@@ -24,7 +24,11 @@ const stepTwoSchema = z.object({
 // --- Componente del Logo ---
 const LogoSalle = () => (
   <div className="flex justify-center items-center mb-4">
-    <School className="h-16 w-16 text-[#0a1c65]" />
+    <img 
+      src="https://res.cloudinary.com/dkqnjpfn9/image/upload/w_200,h_200/v1764224515/LabSalle_xvzavm.jpg" 
+      alt="Logo La Salle" 
+      className="object-contain"
+    />
   </div>
 );
 

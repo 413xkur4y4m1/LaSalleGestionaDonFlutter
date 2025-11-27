@@ -20,7 +20,7 @@ interface QRItem {
 
 export async function GET(req: NextRequest) {
   try {
-    // ⭐ Obtener sesión sin authOptions (usa la configuración por defecto de NextAuth)
+    // ⭐ NextAuth toma automáticamente la configuración global (no necesitas authOptions)
     const session = await getServerSession();
     
     if (!session?.user?.email) {
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
         estado: data.estado || '',
         fechaCreacion: data.fechaCreacion?.toDate?.()?.toISOString() || '',
         fechaLimite: data.fechaDevolucion?.toDate?.()?.toISOString(),
-        qrToken: data.codigo, // El código mismo es el QR
+        qrToken: data.codigo,
         grupo: data.grupo || ''
       });
     });
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // 3. QR DE DEVOLUCIÓN DE ADEUDO (Adeudos con tokenDevolucion)
+    // 3. QR DE DEVOLUCIÓN DE ADEUDO
     const adeudosDevolucionSnapshot = await studentRef
       .collection('Adeudos')
       .where('estado', '==', 'pendiente')
@@ -125,7 +125,7 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // 4. QR DE PAGO PRESENCIAL (Adeudos con tokenPago)
+    // 4. QR DE PAGO PRESENCIAL
     adeudosDevolucionSnapshot.forEach((doc: QueryDocumentSnapshot<DocumentData>) => {
       const data = doc.data();
       if (data.tokenPago) {
@@ -145,22 +145,23 @@ export async function GET(req: NextRequest) {
       }
     });
 
-    // Calcular totales
+    // Totales
     const totales = {
       activacion: qrCenter.activacion.length,
       devolucion: qrCenter.devolucion.length,
       devolucionAdeudo: qrCenter.devolucionAdeudo.length,
       pago: qrCenter.pago.length,
-      total: qrCenter.activacion.length + 
-             qrCenter.devolucion.length + 
-             qrCenter.devolucionAdeudo.length + 
-             qrCenter.pago.length
+      total:
+        qrCenter.activacion.length +
+        qrCenter.devolucion.length +
+        qrCenter.devolucionAdeudo.length +
+        qrCenter.pago.length
     };
 
-    return NextResponse.json({
-      ...qrCenter,
-      totales
-    }, { status: 200 });
+    return NextResponse.json(
+      { ...qrCenter, totales },
+      { status: 200 }
+    );
 
   } catch (error: any) {
     console.error('Error en /api/qr-center:', error);

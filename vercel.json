@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/handle-overdue-loans",
       "schedule": "0 */4 * * *"
+    },
+    {
+      "path": "/api/cron/estadisticas",
+      "schedule": "*/3 * * * *"
     }
   ]
 }
