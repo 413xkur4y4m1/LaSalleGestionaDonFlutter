@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { generateStatisticalAnalysis } from '@/lib/genkit';
+import { ai, generateStatisticalAnalysis } from '@/lib/genkit';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
