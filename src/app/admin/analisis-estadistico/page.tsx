@@ -1,6 +1,9 @@
+// app/admin/analisis-estadistico/page.tsx
+'use client';
+
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, DollarSign, RefreshCw, Brain, Clock } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, RefreshCw, Brain, Clock } from 'lucide-react';
 
 const COLORS = ['#0a1c65', '#e10022', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
 
