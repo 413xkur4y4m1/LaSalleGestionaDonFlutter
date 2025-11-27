@@ -1,7 +1,7 @@
 // app/api/cron/estadisticas/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
-import { collection, getDocs, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { generateStatisticalAnalysis } from '@/lib/genkit';
 
 export const dynamic = 'force-dynamic';

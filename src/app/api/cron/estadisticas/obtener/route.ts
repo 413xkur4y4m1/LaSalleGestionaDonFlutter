@@ -37,8 +37,10 @@ export async function GET() {
     const data = estadisticasDoc.data();
     console.log('✅ Estadísticas obtenidas correctamente');
 
-    // Convertir timestamp a string de forma segura
+    // Convertir timestamps a string de forma segura
     let ultimaActualizacionISO = null;
+    let ultimaActualizacionIAISO = null;
+    
     if (data.ultimaActualizacion) {
       try {
         if (typeof data.ultimaActualizacion.toDate === 'function') {
@@ -48,6 +50,18 @@ export async function GET() {
         }
       } catch (e) {
         console.warn('Error convirtiendo timestamp:', e);
+      }
+    }
+    
+    if (data.ultimaActualizacionIA) {
+      try {
+        if (typeof data.ultimaActualizacionIA.toDate === 'function') {
+          ultimaActualizacionIAISO = data.ultimaActualizacionIA.toDate().toISOString();
+        } else if (data.ultimaActualizacionIA.seconds) {
+          ultimaActualizacionIAISO = new Date(data.ultimaActualizacionIA.seconds * 1000).toISOString();
+        }
+      } catch (e) {
+        console.warn('Error convirtiendo timestamp IA:', e);
       }
     }
 
@@ -70,6 +84,7 @@ export async function GET() {
         tendencias: [],
       },
       ultimaActualizacion: ultimaActualizacionISO,
+      ultimaActualizacionIA: ultimaActualizacionIAISO,
       version: data.version || Date.now(),
     });
 
