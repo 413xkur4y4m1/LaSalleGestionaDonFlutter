@@ -1,40 +1,17 @@
-// app/admin/analisis-estadistico/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts';
 import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, RefreshCw, Brain, Clock } from 'lucide-react';
 
 const COLORS = ['#0a1c65', '#e10022', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
 
-interface MaterialSolicitado {
-  material: string;
-  cantidad: number;
-}
-
-interface MaterialPerdido {
-  material: string;
-  cantidad: number;
-  tipo: string;
-}
-
-interface EstudianteScore {
-  nombre: string;
-  grupo: string;
-  completados: number;
-  adeudos: number;
-  score: number;
-}
-
-interface AnalisisIA {
-  resumen_ejecutivo: string;
-  insights: string[];
-  predicciones: string[];
-  recomendaciones: string[];
-  alertas: Array<{ tipo: string; mensaje: string; prioridad: string }>;
-  tendencias: string[];
-}
-
+interface MaterialSolicitado { material: string; cantidad: number; }
+interface MaterialPerdido { material: string; cantidad: number; tipo: string; }
+interface EstudianteScore { nombre: string; grupo: string; completados: number; adeudos: number; score: number; }
+interface AnalisisIA { resumen_ejecutivo: string; insights: string[]; predicciones: string[]; recomendaciones: string[]; alertas: Array<{ tipo: string; mensaje: string; prioridad: string }>; tendencias: string[]; }
 interface DatosEstadisticos {
   topMateriales: MaterialSolicitado[];
   topPerdidos: MaterialPerdido[];
@@ -45,6 +22,7 @@ interface DatosEstadisticos {
   totalCompletados: number;
   totalEstudiantes: number;
   analisisIA: AnalisisIA | null;
+  ultimaActualizacion?: string | null; // ahora como ISO string
 }
 
 export default function AnalisisEstadistico() {
@@ -56,9 +34,16 @@ export default function AnalisisEstadistico() {
     setLoading(true);
     try {
       const res = await fetch('/api/estadisticas/obtener');
-      const data = await res.json();
+      if (!res.ok) throw new Error('Error al obtener estadísticas');
+      const data: DatosEstadisticos = await res.json();
       setDatos(data);
-      setUltimaActualizacion(new Date());
+
+      // Convertir ISO string a Date
+      if (data.ultimaActualizacion) {
+        setUltimaActualizacion(new Date(data.ultimaActualizacion));
+      } else {
+        setUltimaActualizacion(new Date());
+      }
     } catch (error) {
       console.error('Error cargando estadísticas:', error);
     } finally {
@@ -68,7 +53,7 @@ export default function AnalisisEstadistico() {
 
   useEffect(() => {
     cargarDatos();
-    const interval = setInterval(cargarDatos, 180000); // Refrescar cada 3 min
+    const interval = setInterval(cargarDatos, 180000); // 3 minutos
     return () => clearInterval(interval);
   }, []);
 
@@ -84,72 +69,52 @@ export default function AnalisisEstadistico() {
   }
 
   const { topMateriales, topPerdidos, topEstudiantes, peoresEstudiantes, totalPrestamos, totalAdeudos, totalCompletados, totalEstudiantes, analisisIA } = datos;
-
   const tasaCumplimiento = totalPrestamos > 0 ? ((totalCompletados / totalPrestamos) * 100).toFixed(1) : '0';
   const tasaAdeudos = totalPrestamos > 0 ? ((totalAdeudos / totalPrestamos) * 100).toFixed(1) : '0';
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
-      <div className="max-w-7xl mx-auto mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-[#0a1c65] mb-2">📊 Análisis Estadístico Inteligente</h1>
-            <p className="text-gray-600">Dashboard generado automáticamente con IA cada 3 minutos</p>
-          </div>
-          <div className="text-right">
-            <button onClick={cargarDatos} className="flex items-center gap-2 px-4 py-2 bg-[#e10022] text-white rounded-lg hover:opacity-90 transition-opacity">
-              <RefreshCw className="h-4 w-4" />
-              Actualizar
-            </button>
-            {ultimaActualizacion && (
-              <p className="text-xs text-gray-500 mt-2 flex items-center gap-1 justify-end">
-                <Clock className="h-3 w-3" />
-                {ultimaActualizacion.toLocaleTimeString('es-MX')}
-              </p>
-            )}
-          </div>
+      <div className="max-w-7xl mx-auto mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-[#0a1c65] mb-2">📊 Análisis Estadístico Inteligente</h1>
+          <p className="text-gray-600">Dashboard basado en estadísticas guardadas por el cron</p>
+        </div>
+        <div className="text-right">
+          <button onClick={cargarDatos} className="flex items-center gap-2 px-4 py-2 bg-[#e10022] text-white rounded-lg hover:opacity-90 transition-opacity">
+            <RefreshCw className="h-4 w-4" /> Actualizar
+          </button>
+          {ultimaActualizacion && (
+            <p className="text-xs text-gray-500 mt-2 flex items-center gap-1 justify-end">
+              <Clock className="h-3 w-3" /> {ultimaActualizacion.toLocaleString('es-MX')}
+            </p>
+          )}
         </div>
       </div>
 
-      {/* KPIs Principales */}
+      {/* KPIs */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-[#0a1c65]">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Préstamos</p>
-              <p className="text-3xl font-bold text-[#0a1c65]">{totalPrestamos}</p>
-            </div>
+            <div><p className="text-sm text-gray-600 mb-1">Total Préstamos</p><p className="text-3xl font-bold text-[#0a1c65]">{totalPrestamos}</p></div>
             <Package className="h-12 w-12 text-[#0a1c65] opacity-20" />
           </div>
         </div>
-
         <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-green-500">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Tasa de Cumplimiento</p>
-              <p className="text-3xl font-bold text-green-600">{tasaCumplimiento}%</p>
-            </div>
+            <div><p className="text-sm text-gray-600 mb-1">Tasa de Cumplimiento</p><p className="text-3xl font-bold text-green-600">{tasaCumplimiento}%</p></div>
             <CheckCircle className="h-12 w-12 text-green-500 opacity-20" />
           </div>
         </div>
-
         <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-[#e10022]">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Tasa de Adeudos</p>
-              <p className="text-3xl font-bold text-[#e10022]">{tasaAdeudos}%</p>
-            </div>
+            <div><p className="text-sm text-gray-600 mb-1">Tasa de Adeudos</p><p className="text-3xl font-bold text-[#e10022]">{tasaAdeudos}%</p></div>
             <AlertTriangle className="h-12 w-12 text-[#e10022] opacity-20" />
           </div>
         </div>
-
         <div className="bg-white p-6 rounded-xl shadow-md border-l-4 border-blue-500">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Estudiantes Activos</p>
-              <p className="text-3xl font-bold text-blue-600">{totalEstudiantes}</p>
-            </div>
+            <div><p className="text-sm text-gray-600 mb-1">Estudiantes Activos</p><p className="text-3xl font-bold text-blue-600">{totalEstudiantes}</p></div>
             <Users className="h-12 w-12 text-blue-500 opacity-20" />
           </div>
         </div>
@@ -157,43 +122,31 @@ export default function AnalisisEstadistico() {
 
       {/* Análisis IA */}
       {analisisIA && (
-        <div className="max-w-7xl mx-auto mb-8">
-          <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-6 rounded-xl shadow-lg text-white">
-            <div className="flex items-center gap-3 mb-4">
-              <Brain className="h-8 w-8" />
-              <h2 className="text-2xl font-bold">Resumen Ejecutivo con IA</h2>
-            </div>
-            <p className="text-lg leading-relaxed">{analisisIA.resumen_ejecutivo}</p>
-          </div>
+        <div className="max-w-7xl mx-auto mb-8 bg-gradient-to-r from-purple-500 to-indigo-600 p-6 rounded-xl shadow-lg text-white">
+          <div className="flex items-center gap-3 mb-4"><Brain className="h-8 w-8" /><h2 className="text-2xl font-bold">Resumen Ejecutivo con IA</h2></div>
+          <p className="text-lg leading-relaxed">{analisisIA.resumen_ejecutivo}</p>
         </div>
       )}
 
       {/* Gráficas */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Top Materiales Solicitados */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#0a1c65] mb-4">📦 Top 5 Materiales Más Solicitados</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={topMateriales}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="material" angle={-45} textAnchor="end" height={100} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="cantidad" fill="#0a1c65" />
+              <YAxis /><Tooltip /><Bar dataKey="cantidad" fill="#0a1c65" />
             </BarChart>
           </ResponsiveContainer>
         </div>
-
-        {/* Top Materiales Perdidos */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#e10022] mb-4">⚠️ Top 5 Materiales Más Perdidos</h3>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={topPerdidos}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="material" angle={-45} textAnchor="end" height={100} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="cantidad" fill="#e10022" />
+              <YAxis /><Tooltip /><Bar dataKey="cantidad" fill="#e10022" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -201,35 +154,21 @@ export default function AnalisisEstadistico() {
 
       {/* Distribución */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Distribución de Estados */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#0a1c65] mb-4">🥧 Distribución de Transacciones</h3>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
-              <Pie
-                data={[
-                  { name: 'Completados', value: totalCompletados },
-                  { name: 'Adeudos', value: totalAdeudos },
-                  { name: 'Activos', value: totalPrestamos - totalCompletados - totalAdeudos },
-                ]}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={(entry) => `${entry.name}: ${entry.value}`}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {[0, 1, 2].map((index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
+              <Pie data={[
+                { name: 'Completados', value: totalCompletados },
+                { name: 'Adeudos', value: totalAdeudos },
+                { name: 'Activos', value: totalPrestamos - totalCompletados - totalAdeudos },
+              ]} cx="50%" cy="50%" labelLine={false} label={(entry) => `${entry.name}: ${entry.value}`} outerRadius={100} fill="#8884d8" dataKey="value">
+                {[0,1,2].map(i => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
               </Pie>
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
         </div>
-
-        {/* Campana de Gauss (Simulación de Score) */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#0a1c65] mb-4">📈 Distribución de Comportamiento</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -254,32 +193,23 @@ export default function AnalisisEstadistico() {
 
       {/* Top Estudiantes */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Mejores Estudiantes */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-green-600 mb-4">🏆 Top 5 Mejores Estudiantes</h3>
           <div className="space-y-3">
-            {topEstudiantes.map((est: EstudianteScore, idx: number) => (
+            {topEstudiantes.map((est, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div>
-                  <p className="font-semibold text-gray-800">{est.nombre}</p>
-                  <p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p>
-                </div>
-                <span className="text-2xl font-bold text-green-600">#{idx + 1}</span>
+                <div><p className="font-semibold text-gray-800">{est.nombre}</p><p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p></div>
+                <span className="text-2xl font-bold text-green-600">#{idx+1}</span>
               </div>
             ))}
           </div>
         </div>
-
-        {/* Estudiantes con Más Adeudos */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#e10022] mb-4">⚠️ Estudiantes Requieren Atención</h3>
           <div className="space-y-3">
-            {peoresEstudiantes.map((est: EstudianteScore, idx: number) => (
+            {peoresEstudiantes.map((est, idx) => (
               <div key={idx} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                <div>
-                  <p className="font-semibold text-gray-800">{est.nombre}</p>
-                  <p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p>
-                </div>
+                <div><p className="font-semibold text-gray-800">{est.nombre}</p><p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p></div>
                 <AlertTriangle className="h-6 w-6 text-[#e10022]" />
               </div>
             ))}
@@ -287,14 +217,13 @@ export default function AnalisisEstadistico() {
         </div>
       </div>
 
-      {/* Insights y Recomendaciones IA */}
+      {/* Insights IA */}
       {analisisIA && (
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Insights */}
           <div className="bg-white p-6 rounded-xl shadow-md">
             <h3 className="text-lg font-bold text-[#0a1c65] mb-3">💡 Insights Clave</h3>
             <ul className="space-y-2">
-              {analisisIA.insights?.map((insight: string, idx: number) => (
+              {analisisIA.insights?.map((insight, idx) => (
                 <li key={idx} className="text-sm text-gray-700 flex items-start gap-2">
                   <TrendingUp className="h-4 w-4 text-blue-500 mt-1 flex-shrink-0" />
                   <span>{insight}</span>
@@ -302,12 +231,10 @@ export default function AnalisisEstadistico() {
               ))}
             </ul>
           </div>
-
-          {/* Predicciones */}
           <div className="bg-white p-6 rounded-xl shadow-md">
             <h3 className="text-lg font-bold text-purple-600 mb-3">🔮 Predicciones</h3>
             <ul className="space-y-2">
-              {analisisIA.predicciones?.map((pred: string, idx: number) => (
+              {analisisIA.predicciones?.map((pred, idx) => (
                 <li key={idx} className="text-sm text-gray-700 flex items-start gap-2">
                   <Brain className="h-4 w-4 text-purple-500 mt-1 flex-shrink-0" />
                   <span>{pred}</span>
@@ -315,12 +242,10 @@ export default function AnalisisEstadistico() {
               ))}
             </ul>
           </div>
-
-          {/* Recomendaciones */}
           <div className="bg-white p-6 rounded-xl shadow-md">
             <h3 className="text-lg font-bold text-green-600 mb-3">✅ Recomendaciones</h3>
             <ul className="space-y-2">
-              {analisisIA.recomendaciones?.map((rec: string, idx: number) => (
+              {analisisIA.recomendaciones?.map((rec, idx) => (
                 <li key={idx} className="text-sm text-gray-700 flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-green-500 mt-1 flex-shrink-0" />
                   <span>{rec}</span>

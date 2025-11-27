@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -23,31 +22,25 @@ const AdminTopNavbar = () => {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    // Listener para nuevos préstamos (estado: pendiente)
-    const prestamosQuery = query(
-      collection(db, 'Estudiantes'),
-    );
+    const estudiantesCol = collection(db, 'Estudiantes');
 
-    const unsubscribePrestamos = onSnapshot(prestamosQuery, (snapshot) => {
+    // Suscripción a todos los estudiantes
+    const qEstudiantes = query(estudiantesCol);
+    const unsubscribeEstudiantes = onSnapshot(qEstudiantes, (snapshot) => {
       const newNotifications: Notification[] = [];
-      
+
       snapshot.forEach((studentDoc) => {
         const studentData = studentDoc.data();
-        const prestamosSubcol = collection(db, `Estudiantes/${studentDoc.id}/Prestamos`);
-        
-        // Escuchar préstamos pendientes
-        const qPrestamos = query(
-          prestamosSubcol,
-          where('estado', '==', 'pendiente'),
-          orderBy('fechaSolicitud', 'desc'),
-          limit(5)
-        );
+        const studentId = studentDoc.id;
 
+        // Prestamos pendientes
+        const prestamosCol = collection(db, `Estudiantes/${studentId}/Prestamos`);
+        const qPrestamos = query(prestamosCol, where('estado', '==', 'pendiente'), orderBy('fechaSolicitud', 'desc'), limit(5));
         onSnapshot(qPrestamos, (prestamosSnap) => {
-          prestamosSnap.forEach((prestamoDoc) => {
-            const prestamo = prestamoDoc.data();
+          prestamosSnap.forEach((doc) => {
+            const prestamo = doc.data();
             newNotifications.push({
-              id: prestamoDoc.id,
+              id: `prestamo-${doc.id}`,
               tipo: 'nuevo_prestamo',
               estudiante: studentData.nombre || 'Estudiante',
               mensaje: `${studentData.nombre} solicitó ${prestamo.cantidad} ${prestamo.nombreMaterial}`,
@@ -58,19 +51,14 @@ const AdminTopNavbar = () => {
           updateNotifications(newNotifications);
         });
 
-        // Escuchar adeudos pendientes
-        const adeudosSubcol = collection(db, `Estudiantes/${studentDoc.id}/Adeudos`);
-        const qAdeudos = query(
-          adeudosSubcol,
-          where('estado', '==', 'pendiente'),
-          limit(5)
-        );
-
+        // Adeudos pendientes
+        const adeudosCol = collection(db, `Estudiantes/${studentId}/Adeudos`);
+        const qAdeudos = query(adeudosCol, where('estado', '==', 'pendiente'), orderBy('fechaVencimiento', 'desc'), limit(5));
         onSnapshot(qAdeudos, (adeudosSnap) => {
-          adeudosSnap.forEach((adeudoDoc) => {
-            const adeudo = adeudoDoc.data();
+          adeudosSnap.forEach((doc) => {
+            const adeudo = doc.data();
             newNotifications.push({
-              id: adeudoDoc.id,
+              id: `adeudo-${doc.id}`,
               tipo: 'adeudo',
               estudiante: studentData.nombre || 'Estudiante',
               mensaje: `${studentData.nombre} tiene un adeudo de $${adeudo.precio_ajustado} por ${adeudo.nombreMaterial}`,
@@ -81,24 +69,16 @@ const AdminTopNavbar = () => {
           updateNotifications(newNotifications);
         });
 
-        // Escuchar pagos recientes
-        const pagadosSubcol = collection(db, `Estudiantes/${studentDoc.id}/Pagados`);
-        const qPagados = query(
-          pagadosSubcol,
-          orderBy('fechaPago', 'desc'),
-          limit(3)
-        );
-
-        onSnapshot(qPagados, (pagadosSnap) => {
-          pagadosSnap.forEach((pagoDoc) => {
-            const pago = pagoDoc.data();
-            const now = new Date();
+        // Pagos recientes
+        const pagosCol = collection(db, `Estudiantes/${studentId}/Pagados`);
+        const qPagos = query(pagosCol, orderBy('fechaPago', 'desc'), limit(3));
+        onSnapshot(qPagos, (pagosSnap) => {
+          pagosSnap.forEach((doc) => {
+            const pago = doc.data();
             const pagoDate = pago.fechaPago?.toDate();
-            
-            // Solo mostrar pagos de las últimas 24 horas
-            if (pagoDate && (now.getTime() - pagoDate.getTime()) < 86400000) {
+            if (pagoDate && (new Date().getTime() - pagoDate.getTime() < 86400000)) {
               newNotifications.push({
-                id: pagoDoc.id,
+                id: `pago-${doc.id}`,
                 tipo: 'pago',
                 estudiante: studentData.nombre || 'Estudiante',
                 mensaje: `${studentData.nombre} pagó $${pago.precio} por ${pago.nombreMaterial}`,
@@ -112,56 +92,50 @@ const AdminTopNavbar = () => {
       });
     });
 
-    return () => {
-      unsubscribePrestamos();
-    };
+    return () => unsubscribeEstudiantes();
   }, []);
 
   const updateNotifications = (newNotifs: Notification[]) => {
-    // Ordenar por timestamp descendente
-    const sorted = newNotifs.sort((a, b) => {
-      const timeA = a.timestamp?.toDate?.()?.getTime() || 0;
-      const timeB = b.timestamp?.toDate?.()?.getTime() || 0;
-      return timeB - timeA;
-    });
+    const sorted = newNotifs
+      .sort((a, b) => {
+        const timeA = a.timestamp?.toDate?.()?.getTime?.() || new Date(a.timestamp).getTime();
+        const timeB = b.timestamp?.toDate?.()?.getTime?.() || new Date(b.timestamp).getTime();
+        return timeB - timeA;
+      })
+      .slice(0, 10);
 
-    setNotifications(sorted.slice(0, 10)); // Máximo 10 notificaciones
+    setNotifications(sorted);
     setUnreadCount(sorted.filter(n => !n.leida).length);
+  };
+
+  const markAllAsRead = () => {
+    const updated = notifications.map(n => ({ ...n, leida: true }));
+    setNotifications(updated);
+    setUnreadCount(0);
   };
 
   const handleSignOut = async () => {
     try {
-      // Invalidar cookie de Firebase
       await fetch('/api/auth/session/logout', { method: 'POST' });
-      // Cerrar sesión de NextAuth
       signOut({ callbackUrl: '/' });
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
-      // Cerrar sesión de todos modos
+    } catch {
       signOut({ callbackUrl: '/' });
     }
   };
 
   const getNotificationIcon = (tipo: string) => {
     switch (tipo) {
-      case 'nuevo_prestamo':
-        return <Clock className="h-4 w-4 text-blue-500" />;
-      case 'adeudo':
-        return <AlertCircle className="h-4 w-4 text-red-500" />;
-      case 'pago':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      default:
-        return <Bell className="h-4 w-4" />;
+      case 'nuevo_prestamo': return <Clock className="h-4 w-4 text-blue-500" />;
+      case 'adeudo': return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case 'pago': return <CheckCircle className="h-4 w-4 text-green-500" />;
+      default: return <Bell className="h-4 w-4" />;
     }
   };
 
   const formatTimestamp = (timestamp: any) => {
     if (!timestamp) return '';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    
+    const diffMins = Math.floor((new Date().getTime() - date.getTime()) / 60000);
     if (diffMins < 1) return 'Ahora';
     if (diffMins < 60) return `Hace ${diffMins}m`;
     if (diffMins < 1440) return `Hace ${Math.floor(diffMins / 60)}h`;
@@ -170,20 +144,15 @@ const AdminTopNavbar = () => {
 
   return (
     <header className="bg-[#0a1c65] text-white p-3 md:p-4 flex justify-between items-center shadow-md relative">
-      {/* Logo y título */}
       <div className="flex items-center gap-2 md:gap-4">
         <School className="h-6 w-6 md:h-8 md:w-8 flex-shrink-0" />
-        <span className="text-base md:text-xl font-bold truncate">
-          LaSalleGestiona
-        </span>
+        <span className="text-base md:text-xl font-bold truncate">LaSalleGestiona</span>
       </div>
 
-      {/* Acciones del usuario */}
       <div className="flex items-center gap-3 md:gap-6">
-        {/* Notificaciones */}
         <div className="relative">
           <button 
-            onClick={() => setShowNotifications(!showNotifications)}
+            onClick={() => { setShowNotifications(!showNotifications); markAllAsRead(); }}
             className="relative hover:opacity-80 transition-opacity"
             aria-label="Notificaciones"
           >
@@ -195,18 +164,12 @@ const AdminTopNavbar = () => {
             )}
           </button>
 
-          {/* Panel de notificaciones */}
           {showNotifications && (
             <>
-              <div 
-                className="fixed inset-0 z-10" 
-                onClick={() => setShowNotifications(false)}
-              />
+              <div className="fixed inset-0 z-10" onClick={() => setShowNotifications(false)} />
               <div className="absolute right-0 top-12 w-80 md:w-96 bg-white rounded-lg shadow-2xl z-20 border border-gray-200 max-h-[80vh] overflow-hidden">
                 <div className="p-4 border-b border-gray-200 bg-gray-50">
-                  <h3 className="font-bold text-gray-800 text-sm md:text-base">
-                    Notificaciones ({unreadCount} nuevas)
-                  </h3>
+                  <h3 className="font-bold text-gray-800 text-sm md:text-base">Notificaciones</h3>
                 </div>
                 <div className="overflow-y-auto max-h-96">
                   {notifications.length === 0 ? (
@@ -216,26 +179,13 @@ const AdminTopNavbar = () => {
                     </div>
                   ) : (
                     notifications.map((notif) => (
-                      <div
-                        key={notif.id}
-                        className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${
-                          !notif.leida ? 'bg-blue-50' : ''
-                        }`}
-                      >
+                      <div key={notif.id} className={`p-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${!notif.leida ? 'bg-blue-50' : ''}`}>
                         <div className="flex items-start gap-3">
-                          <div className="flex-shrink-0 mt-1">
-                            {getNotificationIcon(notif.tipo)}
-                          </div>
+                          <div className="flex-shrink-0 mt-1">{getNotificationIcon(notif.tipo)}</div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 font-medium mb-1">
-                              {notif.estudiante}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              {notif.mensaje}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-1">
-                              {formatTimestamp(notif.timestamp)}
-                            </p>
+                            <p className="text-sm text-gray-800 font-medium mb-1">{notif.estudiante}</p>
+                            <p className="text-xs text-gray-600">{notif.mensaje}</p>
+                            <p className="text-xs text-gray-400 mt-1">{formatTimestamp(notif.timestamp)}</p>
                           </div>
                         </div>
                       </div>
@@ -244,7 +194,10 @@ const AdminTopNavbar = () => {
                 </div>
                 {notifications.length > 0 && (
                   <div className="p-3 border-t border-gray-200 bg-gray-50">
-                    <button className="text-xs text-blue-600 hover:text-blue-700 w-full text-center font-medium">
+                    <button
+                      className="text-xs text-blue-600 hover:text-blue-700 w-full text-center font-medium"
+                      onClick={() => alert('Aquí abrirías la página de todas las notificaciones')}
+                    >
                       Ver todas las notificaciones
                     </button>
                   </div>
@@ -254,31 +207,14 @@ const AdminTopNavbar = () => {
           )}
         </div>
 
-        {/* Avatar - Oculto en móviles pequeños */}
         <div className="hidden sm:flex items-center gap-2">
           <div className="h-8 w-8 md:h-9 md:w-9 bg-gray-300 rounded-full overflow-hidden flex-shrink-0">
-            {session?.user?.image ? (
-              <img 
-                src={session.user.image} 
-                alt="Avatar" 
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <User className="h-full w-full text-gray-500 p-1" />
-            )}
+            {session?.user?.image ? <img src={session.user.image} alt="Avatar" className="h-full w-full object-cover"/> : <User className="h-full w-full text-gray-500 p-1" />}
           </div>
-          <span className="hidden md:block text-sm font-medium truncate max-w-[120px]">
-            {session?.user?.name || 'Admin'}
-          </span>
+          <span className="hidden md:block text-sm font-medium truncate max-w-[120px]">{session?.user?.name || 'Admin'}</span>
         </div>
 
-        {/* Cerrar sesión */}
-        <button 
-          onClick={handleSignOut}
-          className="hover:opacity-80 transition-opacity"
-          aria-label="Cerrar sesión"
-          title="Cerrar sesión"
-        >
+        <button onClick={handleSignOut} className="hover:opacity-80 transition-opacity" aria-label="Cerrar sesión" title="Cerrar sesión">
           <LogOut className="h-5 w-5 md:h-6 md:w-6" />
         </button>
       </div>
