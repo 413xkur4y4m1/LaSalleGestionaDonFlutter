@@ -1,9 +1,8 @@
-// app/admin/analisis-estadistico/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, RefreshCw, Brain, Clock } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, DollarSign, RefreshCw, Brain, Clock } from 'lucide-react';
 
 const COLORS = ['#0a1c65', '#e10022', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
 
@@ -55,12 +54,44 @@ export default function AnalisisEstadistico() {
   const cargarDatos = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/estadisticas/obtener');
+      console.log('🔄 Cargando datos desde API...');
+      const res = await fetch('/api/estadisticas/obtener', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      });
+      
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      
       const data = await res.json();
+      console.log('✅ Datos recibidos:', data);
+      
       setDatos(data);
       setUltimaActualizacion(new Date());
     } catch (error) {
-      console.error('Error cargando estadísticas:', error);
+      console.error('❌ Error cargando estadísticas:', error);
+      // Mostrar datos vacíos en caso de error
+      setDatos({
+        topMateriales: [],
+        topPerdidos: [],
+        topEstudiantes: [],
+        peoresEstudiantes: [],
+        totalPrestamos: 0,
+        totalAdeudos: 0,
+        totalCompletados: 0,
+        totalEstudiantes: 0,
+        analisisIA: {
+          resumen_ejecutivo: 'Error al cargar datos. Por favor, intenta refrescar la página.',
+          insights: [],
+          predicciones: [],
+          recomendaciones: [],
+          alertas: [],
+          tendencias: [],
+        },
+      });
     } finally {
       setLoading(false);
     }
@@ -257,33 +288,41 @@ export default function AnalisisEstadistico() {
         {/* Mejores Estudiantes */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-green-600 mb-4">🏆 Top 5 Mejores Estudiantes</h3>
-          <div className="space-y-3">
-            {topEstudiantes.map((est: EstudianteScore, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                <div>
-                  <p className="font-semibold text-gray-800">{est.nombre}</p>
-                  <p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p>
+          {topEstudiantes && topEstudiantes.length > 0 ? (
+            <div className="space-y-3">
+              {topEstudiantes.map((est: EstudianteScore, idx: number) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                  <div>
+                    <p className="font-semibold text-gray-800">{est.nombre}</p>
+                    <p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p>
+                  </div>
+                  <span className="text-2xl font-bold text-green-600">#{idx + 1}</span>
                 </div>
-                <span className="text-2xl font-bold text-green-600">#{idx + 1}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">No hay datos disponibles aún</p>
+          )}
         </div>
 
         {/* Estudiantes con Más Adeudos */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#e10022] mb-4">⚠️ Estudiantes Requieren Atención</h3>
-          <div className="space-y-3">
-            {peoresEstudiantes.map((est: EstudianteScore, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                <div>
-                  <p className="font-semibold text-gray-800">{est.nombre}</p>
-                  <p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p>
+          {peoresEstudiantes && peoresEstudiantes.length > 0 ? (
+            <div className="space-y-3">
+              {peoresEstudiantes.map((est: EstudianteScore, idx: number) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
+                  <div>
+                    <p className="font-semibold text-gray-800">{est.nombre}</p>
+                    <p className="text-sm text-gray-600">{est.grupo} • {est.completados} completados, {est.adeudos} adeudos</p>
+                  </div>
+                  <AlertTriangle className="h-6 w-6 text-[#e10022]" />
                 </div>
-                <AlertTriangle className="h-6 w-6 text-[#e10022]" />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">No hay datos disponibles aún</p>
+          )}
         </div>
       </div>
 
