@@ -1,14 +1,14 @@
-// hooks/useAdeudosFiltrados.ts
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import {
   collection,
   query,
   where,
+  getDocs,
   orderBy,
-  onSnapshot,
+  limit,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase-config.ts";
+import { db } from "@/lib/firebase-config"; // ❌ Quita el .ts
 
 export interface Adeudo {
   id: string;
@@ -18,65 +18,48 @@ export interface Adeudo {
   precio_unitario: number;
   precio_ajustado: number;
   moneda: string;
-  estado: "pendiente" | "pagado" | "devuelto";
-  tipo: "rotura" | "perdida" | "vencimiento";
-  fechaVencimiento: Timestamp;
+  estado: string;
+  tipo: string;
+  fechaVencimiento: Timestamp | null;
   grupo: string;
-  prestamoOriginal?: string;
+  prestamoOriginal: string | null;
 }
 
-interface FiltrosAdeudos {
-  estado?: string;
-  tipo?: string;
-  desde?: Date;
-  hasta?: Date;
-  orden?: "asc" | "desc";
-}
-
-export function useAdeudosFiltrados(uid: string, filtros: FiltrosAdeudos = {}) {
+export function useAdeudosFiltrados(studentUid: string | null) {
   const [adeudos, setAdeudos] = useState<Adeudo[]>([]);
-  const [cargando, setCargando] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!uid) return;
-
-    let ref = collection(db, "Estudiantes", uid, "Adeudos");
-
-    const criterios: any[] = [];
-
-    if (filtros.estado) {
-      criterios.push(where("estado", "==", filtros.estado));
+    if (!studentUid) {
+      setLoading(false);
+      return;
     }
 
-    if (filtros.tipo) {
-      criterios.push(where("tipo", "==", filtros.tipo));
-    }
+    const fetchAdeudos = async () => {
+      try {
+        setLoading(true);
+        const adeudosRef = collection(db, `Estudiantes/${studentUid}/Adeudos`);
+        const q = query(adeudosRef, orderBy("fechaVencimiento", "desc"));
+        
+        const snapshot = await getDocs(q);
+        const adeudosData = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Adeudo[];
+        
+        setAdeudos(adeudosData);
+        setError(null);
+      } catch (err: any) {
+        console.error("Error fetching adeudos:", err);
+        setError(err.message || "Error al cargar adeudos");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    if (filtros.desde) {
-      criterios.push(where("fechaVencimiento", ">=", Timestamp.fromDate(filtros.desde)));
-    }
+    fetchAdeudos();
+  }, [studentUid]);
 
-    if (filtros.hasta) {
-      criterios.push(where("fechaVencimiento", "<=", Timestamp.fromDate(filtros.hasta)));
-    }
-
-    const orden = filtros.orden || "desc";
-    criterios.push(orderBy("fechaVencimiento", orden));
-
-    const q = query(ref, ...criterios);
-
-    const unsub = onSnapshot(q, (snapshot) => {
-      const docs: Adeudo[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Adeudo[];
-
-      setAdeudos(docs);
-      setCargando(false);
-    });
-
-    return () => unsub();
-  }, [uid, filtros]);
-
-  return { adeudos, cargando };
+  return { adeudos, loading, error };
 }
