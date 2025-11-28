@@ -447,6 +447,7 @@ const Gastrobot = () => {
 
   return (
     <div className="bg-white shadow-xl rounded-lg w-full h-full flex flex-col border border-gray-200">
+      <BackButton showHome homeHref="/dashboard" className="mb-4" />
       <div className="p-3 bg-white rounded-t-lg flex items-center border-b border-gray-200">
         <IconoGastrobot className="h-8 w-8 text-red-600" />
         <h3 className="font-bold text-gray-800 ml-2 text-lg">Gastrobot</h3>

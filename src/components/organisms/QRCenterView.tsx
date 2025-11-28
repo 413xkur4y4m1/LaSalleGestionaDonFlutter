@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
+import BackButton from '@/components/molecules/BackButton';
 import { 
   Download, 
   Clock, 
@@ -309,7 +310,9 @@ const QRCenterView: React.FC<QRCenterViewProps> = ({ studentEmail }) => {
     <div className="space-y-6 p-4 max-w-4xl mx-auto">
       {/* Header con resumen */}
       <div className="bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-lg p-6 shadow-sm">
+      <BackButton showHome homeHref="/dashboard" className="mb-4" />
         <div className="flex items-center justify-between mb-4">
+          
           <div className="flex items-center gap-3">
             <QrCode className="h-8 w-8 text-red-600" />
             <h1 className="text-2xl font-bold text-gray-800">Mis Códigos QR</h1>

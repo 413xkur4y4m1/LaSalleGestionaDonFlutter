@@ -79,6 +79,7 @@ const CompletadosPage = () => {
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
+    <BackButton showHome homeHref="/dashboard" className="mb-4" />
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
             <CheckCircle className="h-8 w-8 text-green-600"/>

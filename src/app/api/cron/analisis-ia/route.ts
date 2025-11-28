@@ -5,7 +5,7 @@ import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { generateStatisticalAnalysis } from '@/lib/genkit';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function GET(req: NextRequest) {
   try {

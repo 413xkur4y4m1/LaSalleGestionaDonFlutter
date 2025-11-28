@@ -1,4 +1,4 @@
-// /home/user/studio/src/app/(authenticated)/dashboard/qr-center/page.tsx
+
 'use client';
 
 import React from 'react';
@@ -12,6 +12,7 @@ export default function QRCenterPage() {
   if (status === 'loading') {
     return (
       <div className="flex items-center justify-center min-h-screen">
+        
         <Loader2 className="h-8 w-8 animate-spin text-red-600" />
       </div>
     );

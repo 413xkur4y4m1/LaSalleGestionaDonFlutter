@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, DollarSign, RefreshCw, Brain, Clock } from 'lucide-react';
+import AdminBackButton from '@/components/molecules/AdminBackButton'; // ← PASO 1: IMPORTAR
 
 const COLORS = ['#0a1c65', '#e10022', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
 
@@ -73,7 +74,6 @@ export default function AnalisisEstadistico() {
       setUltimaActualizacion(new Date());
     } catch (error) {
       console.error('❌ Error cargando estadísticas:', error);
-      // Mostrar datos vacíos en caso de error
       setDatos({
         topMateriales: [],
         topPerdidos: [],
@@ -99,7 +99,7 @@ export default function AnalisisEstadistico() {
 
   useEffect(() => {
     cargarDatos();
-    const interval = setInterval(cargarDatos, 180000); // Refrescar cada 3 min
+    const interval = setInterval(cargarDatos, 180000);
     return () => clearInterval(interval);
   }, []);
 
@@ -123,6 +123,11 @@ export default function AnalisisEstadistico() {
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
+        {/* PASO 2: USAR EL COMPONENTE AQUÍ ↓ */}
+        <div className="mb-4">
+          <AdminBackButton href="/admin" />
+        </div>
+        
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-[#0a1c65] mb-2">📊 Análisis Estadístico Inteligente</h1>

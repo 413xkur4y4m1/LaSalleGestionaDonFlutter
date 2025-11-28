@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart, ScanLine, UserPlus, LogOut, Menu, X } from 'lucide-react';
+import { BarChart, ScanLine, UserPlus, LogOut, Menu, X, Users } from 'lucide-react';
 import { signOut } from 'next-auth/react';
 
 const menuItems = [
     { href: '/admin/analisis-estadistico', label: 'Análisis Estadístico', icon: BarChart },
+    { href: '/admin/estudiantes', label: 'Gestión de Estudiantes', icon: Users },
     { href: '/admin/scan', label: 'Escanear QR', icon: ScanLine },
     { href: '/admin/agregar-admin', label: 'Agregar Admin', icon: UserPlus },
 ];
