@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Home } from 'lucide-react';
 
 interface BackButtonProps {
-  /** Ruta a la que redirigir. Default: "/admin/dashboard" */
+  /** Ruta a la que redirigir. Si no se especifica, usa router.back() */
   href?: string;
   /** Texto del botón. Default: "Regresar" */
   label?: string;
@@ -18,7 +18,7 @@ interface BackButtonProps {
 }
 
 export default function BackButton({
-  href = '/admin/dashboard', // Valor por defecto cambiado aquí
+  href,
   label = 'Regresar',
   showHome = false,
   homeHref = '/estudiante/dashboard',
@@ -27,11 +27,11 @@ export default function BackButton({
   const router = useRouter();
 
   const handleBack = () => {
-    router.push(href);
-  };
-
-  const handleHome = () => {
-    router.push(homeHref);
+    if (href) {
+      router.push(href);
+    } else {
+      router.back();
+    }
   };
 
   return (
@@ -45,10 +45,10 @@ export default function BackButton({
         <span className="font-medium">{label}</span>
       </button>
 
-      {/* Botón de Inicio (opcional) */}
+      {/* Botón de Inicio (opcional) - ahora usa la misma función handleBack */}
       {showHome && (
         <button
-          onClick={handleHome}
+          onClick={handleBack}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#e10022] to-[#0a1c65] text-white rounded-lg hover:opacity-90 transition-opacity shadow-sm"
         >
           <Home className="h-4 w-4" />
@@ -61,7 +61,7 @@ export default function BackButton({
 
 // Versión compacta para móviles
 export function BackButtonMobile({
-  href = '/admin/dashboard', // Valor por defecto cambiado aquí
+  href,
   showHome = false,
   homeHref = '/estudiante',
   className = '',
@@ -69,11 +69,11 @@ export function BackButtonMobile({
   const router = useRouter();
 
   const handleBack = () => {
-    router.push(href);
-  };
-
-  const handleHome = () => {
-    router.push(homeHref);
+    if (href) {
+      router.push(href);
+    } else {
+      router.back();
+    }
   };
 
   return (
@@ -88,7 +88,7 @@ export function BackButtonMobile({
 
       {showHome && (
         <button
-          onClick={handleHome}
+          onClick={handleBack}
           className="p-2 bg-gradient-to-r from-[#e10022] to-[#0a1c65] text-white rounded-lg hover:opacity-90 transition-opacity"
           aria-label="Ir al inicio"
         >
