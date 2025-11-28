@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, DollarSign, RefreshCw, Brain, Clock, Sparkles } from 'lucide-react';
+import AdminBackButton from '@/components/molecules/AdminBackButton';
 
 const COLORS = ['#0a1c65', '#e10022', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
 
@@ -129,16 +130,7 @@ function BotonGenerarAnalisisIA({ onAnalisisGenerado }: { onAnalisisGenerado: ()
   );
 }
 
-// Componente AdminBackButton (simulado)
-function AdminBackButton({ href, showHome }: { href: string; showHome: boolean }) {
-  return (
-    <a href={href} className="inline-flex items-center gap-2 text-[#0a1c65] hover:text-[#e10022] transition-colors">
-      <span>←</span>
-      <span>Volver al Dashboard</span>
-      {showHome && <span>🏠</span>}
-    </a>
-  );
-}
+
 
 export default function AnalisisEstadistico() {
   const [datos, setDatos] = useState<DatosEstadisticos | null>(null);
@@ -288,19 +280,6 @@ export default function AnalisisEstadistico() {
           </div>
         </div>
       </div>
-
-      {/* Análisis IA */}
-      {analisisIA && (
-        <div className="max-w-7xl mx-auto mb-8">
-          <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-6 rounded-xl shadow-lg text-white">
-            <div className="flex items-center gap-3 mb-4">
-              <Brain className="h-8 w-8" />
-              <h2 className="text-2xl font-bold">Resumen Ejecutivo con IA</h2>
-            </div>
-            <p className="text-lg leading-relaxed">{analisisIA.resumen_ejecutivo}</p>
-          </div>
-        </div>
-      )}
 
       {/* Gráficas */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
