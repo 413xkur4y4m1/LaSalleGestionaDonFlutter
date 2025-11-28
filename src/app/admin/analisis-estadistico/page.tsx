@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, DollarSign, RefreshCw, Brain, Clock } from 'lucide-react';
-import AdminBackButton from '@/components/molecules/AdminBackButton'; // ← PASO 1: IMPORTAR
+import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, DollarSign, RefreshCw, Brain, Clock, Sparkles } from 'lucide-react';
 
 const COLORS = ['#0a1c65', '#e10022', '#2563eb', '#10b981', '#f59e0b', '#8b5cf6'];
 
@@ -45,6 +44,100 @@ interface DatosEstadisticos {
   totalCompletados: number;
   totalEstudiantes: number;
   analisisIA: AnalisisIA | null;
+}
+
+// Componente del botón de generar análisis IA
+function BotonGenerarAnalisisIA({ onAnalisisGenerado }: { onAnalisisGenerado: () => void }) {
+  const [loading, setLoading] = useState(false);
+  const [mensaje, setMensaje] = useState('');
+
+  const generarAnalisis = async () => {
+    setLoading(true);
+    setMensaje('');
+    
+    try {
+      console.log('🚀 Iniciando generación de análisis IA...');
+      
+      const res = await fetch('/api/admin/estadisticas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Error al generar análisis');
+      }
+
+      const data = await res.json();
+      
+      if (data.success) {
+        setMensaje('✅ Análisis generado exitosamente');
+        console.log('✅ Análisis generado:', data.analisis);
+        
+        // Esperar un momento para que se guarde en la BD
+        setTimeout(() => {
+          onAnalisisGenerado();
+        }, 1500);
+      } else {
+        throw new Error(data.message || 'Error al generar análisis');
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Error:', error);
+      setMensaje(error.message || '❌ Error al generar análisis');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-6 rounded-xl shadow-lg">
+      <div className="flex items-center justify-between">
+        <div className="text-white">
+          <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
+            <Sparkles className="h-6 w-6" />
+            Análisis Inteligente
+          </h3>
+          <p className="text-sm opacity-90">
+            Genera un análisis completo con IA de todas las estadísticas actuales
+          </p>
+        </div>
+        <button
+          onClick={generarAnalisis}
+          disabled={loading}
+          className="px-6 py-3 bg-white text-purple-600 font-semibold rounded-lg hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+        >
+          {loading ? (
+            <>
+              <RefreshCw className="h-5 w-5 animate-spin" />
+              Generando...
+            </>
+          ) : (
+            <>
+              <Brain className="h-5 w-5" />
+              Generar Análisis IA
+            </>
+          )}
+        </button>
+      </div>
+      {mensaje && (
+        <p className={`mt-3 text-sm font-medium ${mensaje.includes('✅') ? 'text-green-100' : 'text-red-100'}`}>
+          {mensaje}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Componente AdminBackButton (simulado)
+function AdminBackButton({ href, showHome }: { href: string; showHome: boolean }) {
+  return (
+    <a href={href} className="inline-flex items-center gap-2 text-[#0a1c65] hover:text-[#e10022] transition-colors">
+      <span>←</span>
+      <span>Volver al Dashboard</span>
+      {showHome && <span>🏠</span>}
+    </a>
+  );
 }
 
 export default function AnalisisEstadistico() {
@@ -99,8 +192,6 @@ export default function AnalisisEstadistico() {
 
   useEffect(() => {
     cargarDatos();
-    const interval = setInterval(cargarDatos, 180000);
-    return () => clearInterval(interval);
   }, []);
 
   if (loading || !datos) {
@@ -123,23 +214,22 @@ export default function AnalisisEstadistico() {
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
-        {/* PASO 2: USAR EL COMPONENTE AQUÍ ↓ */}
         <div className="mb-4">
-         <AdminBackButton 
-                href="/admin/dashboard"
-                showHome={true}
-              />
+          <AdminBackButton 
+            href="/admin/dashboard"
+            showHome={true}
+          />
         </div>
         
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-[#0a1c65] mb-2">📊 Análisis Estadístico Inteligente</h1>
-            <p className="text-gray-600">Dashboard generado automáticamente con IA cada 3 minutos</p>
+            <p className="text-gray-600">Dashboard con análisis generado por IA bajo demanda</p>
           </div>
           <div className="text-right">
             <button onClick={cargarDatos} className="flex items-center gap-2 px-4 py-2 bg-[#e10022] text-white rounded-lg hover:opacity-90 transition-opacity">
               <RefreshCw className="h-4 w-4" />
-              Actualizar
+              Actualizar Datos
             </button>
             {ultimaActualizacion && (
               <p className="text-xs text-gray-500 mt-2 flex items-center gap-1 justify-end">
@@ -148,6 +238,11 @@ export default function AnalisisEstadistico() {
               </p>
             )}
           </div>
+        </div>
+
+        {/* Botón de Generar IA - NUEVO */}
+        <div className="mb-6">
+          <BotonGenerarAnalisisIA onAnalisisGenerado={cargarDatos} />
         </div>
       </div>
 
@@ -268,7 +363,7 @@ export default function AnalisisEstadistico() {
           </ResponsiveContainer>
         </div>
 
-        {/* Campana de Gauss (Simulación de Score) */}
+        {/* Campana de Gauss */}
         <div className="bg-white p-6 rounded-xl shadow-md">
           <h3 className="text-xl font-bold text-[#0a1c65] mb-4">📈 Distribución de Comportamiento</h3>
           <ResponsiveContainer width="100%" height={300}>

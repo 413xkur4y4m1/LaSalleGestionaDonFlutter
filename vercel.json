@@ -19,10 +19,6 @@
     {
       "path": "/api/cron/estadisticas-basicas",
       "schedule": "*/3 * * * *"
-    },
-    {
-      "path": "/api/cron/analisis-ia",
-      "schedule": "0 0 * * 0"
     }
   ]
 }
