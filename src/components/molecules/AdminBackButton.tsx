@@ -16,8 +16,8 @@ const AdminBackButton: React.FC<AdminBackButtonProps> = ({ href, className = '' 
       // Si se proporciona una URL específica, navegar ahí
       router.push(href);
     } else {
-      // Si no, usar el historial del navegador
-      router.back();
+      // Si no hay href, navegar al dashboard
+      router.push('/admin/dashboard');
     }
   };
 
