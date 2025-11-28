@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { LoaderCircle, ServerCrash, Archive, FileText } from 'lucide-react';
+import BackButton from '@/components/molecules/BackButton';
 
 // Defino el tipo de dato para un préstamo, para que el código sea más seguro.
 interface Loan {

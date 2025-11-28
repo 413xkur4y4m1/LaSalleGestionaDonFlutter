@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { LoaderCircle, ServerCrash, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { LoaderCircle, ServerCrash, AlertTriangle, ShieldAlert, TrendingUp, DollarSign } from 'lucide-react';
+import DebtFilters from '@/components/molecules/DebtFilters'; // Ajusta la ruta según tu estructura
 
-// Tipo de dato para un Adeudo - ACTUALIZADO para coincidir con el endpoint
+// Tipo de dato para un Adeudo
 interface Debt {
   id: string;
   codigo: string;
@@ -31,14 +32,52 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
     });
   };
 
+  // Calcular antigüedad del adeudo
+  const getAntiguedad = (fechaVencimiento: string | null) => {
+    if (!fechaVencimiento) return null;
+    const vencimiento = new Date(fechaVencimiento);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - vencimiento.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays <= 30) return { texto: 'Reciente', color: 'text-yellow-600', bg: 'bg-yellow-50' };
+    if (diffDays <= 90) return { texto: `${diffDays} días`, color: 'text-orange-600', bg: 'bg-orange-50' };
+    if (diffDays <= 180) return { texto: `${Math.floor(diffDays / 30)} meses`, color: 'text-red-600', bg: 'bg-red-50' };
+    return { texto: 'Muy antiguo', color: 'text-red-800', bg: 'bg-red-100' };
+  };
+
+  const antiguedad = getAntiguedad(debt.fechaVencimiento);
+
+  // Iconos según tipo
+  const getTipoIcon = (tipo: string) => {
+    switch (tipo) {
+      case 'rotura': return '🔨';
+      case 'perdida': return '❌';
+      case 'vencimiento': return '⏰';
+      default: return '📦';
+    }
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md border border-amber-300 hover:shadow-lg transition-shadow duration-300 overflow-hidden">
+    <div className="bg-white rounded-lg shadow-md border border-amber-300 hover:shadow-lg transition-all duration-300 overflow-hidden">
       <div className="p-5">
         <div className="flex justify-between items-start">
-            <div>
-                <h3 className="font-bold text-lg text-amber-900">{debt.nombreMaterial}</h3>
+            <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-2xl">{getTipoIcon(debt.tipo)}</span>
+                  <h3 className="font-bold text-lg text-amber-900">{debt.nombreMaterial}</h3>
+                </div>
                 <p className="text-sm text-gray-500 font-mono">{debt.codigo}</p>
                 <p className="text-sm text-gray-600 mt-1">Cantidad: {debt.cantidad}</p>
+                
+                {/* Badge de estado */}
+                <span className={`inline-block mt-2 px-3 py-1 text-xs font-semibold rounded-full ${
+                  debt.estado === 'pendiente' ? 'bg-red-100 text-red-700' :
+                  debt.estado === 'pagado' ? 'bg-green-100 text-green-700' :
+                  'bg-blue-100 text-blue-700'
+                }`}>
+                  {debt.estado === 'pendiente' ? '⏳ Pendiente' :
+                   debt.estado === 'pagado' ? '✅ Pagado' : '🔄 Devuelto'}
+                </span>
             </div>
             <div className="text-right">
                 <p className="text-sm text-gray-600">Monto Total</p>
@@ -56,10 +95,64 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
                 </p>
             </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-gray-100">
-            <p className="font-semibold text-gray-700 text-sm">Fecha de Vencimiento:</p>
-            <p className="text-red-600 font-bold">{formatDate(debt.fechaVencimiento)}</p>
-            <p className="text-xs text-gray-500 mt-2 capitalize">Tipo: {debt.tipo}</p>
+        
+        <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
+            <div>
+              <p className="font-semibold text-gray-700 text-sm">Fecha de Vencimiento:</p>
+              <p className="text-red-600 font-bold">{formatDate(debt.fechaVencimiento)}</p>
+            </div>
+            
+            {/* Indicador de antigüedad */}
+            {antiguedad && (
+              <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${antiguedad.bg} ${antiguedad.color}`}>
+                {antiguedad.texto}
+              </div>
+            )}
+            
+            <p className="text-xs text-gray-500 capitalize">Tipo: {debt.tipo}</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Componente de Resumen Estadístico ---
+const DebtSummary: React.FC<{ debts: Debt[] }> = ({ debts }) => {
+  const totalDebt = debts.reduce((sum, debt) => sum + debt.precio_ajustado, 0);
+  const pendingDebts = debts.filter(d => d.estado === 'pendiente');
+  const paidDebts = debts.filter(d => d.estado === 'pagado');
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
+        <div className="flex items-center gap-3">
+          <DollarSign className="h-8 w-8 text-amber-600" />
+          <div>
+            <p className="text-sm text-gray-600">Total Adeudado</p>
+            <p className="text-2xl font-bold text-amber-700">
+              {totalDebt.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="h-8 w-8 text-red-600" />
+          <div>
+            <p className="text-sm text-gray-600">Pendientes</p>
+            <p className="text-2xl font-bold text-red-700">{pendingDebts.length}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+        <div className="flex items-center gap-3">
+          <TrendingUp className="h-8 w-8 text-green-600" />
+          <div>
+            <p className="text-sm text-gray-600">Pagados</p>
+            <p className="text-2xl font-bold text-green-700">{paidDebts.length}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -69,7 +162,8 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
 // --- Página Principal que muestra la lista de Adeudos ---
 const AdeudosPage = () => {
   const { data: session } = useSession();
-  const [debts, setDebts] = useState<Debt[]>([]);
+  const [allDebts, setAllDebts] = useState<Debt[]>([]);
+  const [filteredDebts, setFilteredDebts] = useState<Debt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,7 +185,8 @@ const AdeudosPage = () => {
           
           const data: Debt[] = await response.json();
           console.log('Adeudos recibidos:', data);
-          setDebts(data);
+          setAllDebts(data);
+          setFilteredDebts(data);
         } catch (err: any) {
           console.error('Error fetching debts:', err);
           setError(err.message);
@@ -131,7 +226,7 @@ const AdeudosPage = () => {
           </div>
         )}
 
-        {!isLoading && !error && debts.length === 0 && (
+        {!isLoading && !error && allDebts.length === 0 && (
           <div className="flex flex-col items-center justify-center h-64 bg-gray-50 border border-gray-200 rounded-lg p-6">
             <AlertTriangle className="h-12 w-12 text-gray-400"/>
             <p className="mt-4 text-gray-600 font-semibold">¡Estás al corriente!</p>
@@ -139,10 +234,30 @@ const AdeudosPage = () => {
           </div>
         )}
 
-        {!isLoading && !error && debts.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {debts.map(debt => <DebtCard key={debt.id} debt={debt} />)}
-          </div>
+        {!isLoading && !error && allDebts.length > 0 && (
+          <>
+            {/* Resumen estadístico */}
+            <DebtSummary debts={filteredDebts} />
+
+            {/* Filtros y búsqueda */}
+            <DebtFilters 
+              debts={allDebts} 
+              onFilteredDebtsChange={setFilteredDebts}
+            />
+
+            {/* Grid de adeudos */}
+            {filteredDebts.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredDebts.map(debt => <DebtCard key={debt.id} debt={debt} />)}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-64 bg-gray-50 border border-gray-200 rounded-lg p-6">
+                <AlertTriangle className="h-12 w-12 text-gray-400"/>
+                <p className="mt-4 text-gray-600 font-semibold">No se encontraron resultados</p>
+                <p className="text-gray-500 text-sm">Intenta ajustar los filtros de búsqueda</p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

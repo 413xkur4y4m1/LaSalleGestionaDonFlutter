@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { Send, LoaderCircle, ShoppingCart, List, AlertTriangle, HelpCircle, Download } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import BackButton from '@/components/molecules/BackButton';
 
 import IconoGastrobot from '@/components/atoms/IconoGastrobot';
 import CatalogView from '@/components/organisms/CatalogView';

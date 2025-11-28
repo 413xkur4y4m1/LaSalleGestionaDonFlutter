@@ -156,17 +156,23 @@ export async function GET(req: NextRequest) {
     // Obtener el análisis IA previo (si existe)
     const reporteRef = doc(db, 'Estadisticas', 'reporte_actual');
     const reporteSnap = await getDoc(reporteRef);
-    const analisisIAPrevio = reporteSnap.exists() ? reporteSnap.data().analisisIA : null;
+    const datosExistentes = reporteSnap.exists() ? reporteSnap.data() : {};
 
-    // Guardar estadísticas básicas + contexto + análisis IA previo
-    await setDoc(reporteRef, {
+    // Preparar datos a guardar, evitando undefined
+    const datosAGuardar: any = {
       ...estadisticas,
-      contextoGraficas, // Contexto simple para entender las gráficas
-      analisisIA: analisisIAPrevio || contextoGraficas, // Usar IA previo o contexto básico
+      contextoGraficas,
+      analisisIA: datosExistentes.analisisIA || contextoGraficas,
       ultimaActualizacion: serverTimestamp(),
-      ultimaActualizacionIA: reporteSnap.exists() ? reporteSnap.data().ultimaActualizacionIA : null,
       version: Date.now(),
-    });
+    };
+
+    // Solo agregar ultimaActualizacionIA si existe en los datos previos
+    if (datosExistentes.ultimaActualizacionIA) {
+      datosAGuardar.ultimaActualizacionIA = datosExistentes.ultimaActualizacionIA;
+    }
+
+    await setDoc(reporteRef, datosAGuardar);
 
     console.log('✅ Estadísticas básicas guardadas');
 

@@ -67,7 +67,7 @@ export default function BackButton({
 export function BackButtonMobile({
   href,
   showHome = false,
-  homeHref = '/estudiante/dashboard',
+  homeHref = '/estudiante',
   className = '',
 }: Omit<BackButtonProps, 'label'>) {
   const router = useRouter();

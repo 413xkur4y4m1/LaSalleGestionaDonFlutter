@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { LoaderCircle, ServerCrash, CheckCircle, Archive } from 'lucide-react';
+import BackButton from '@/components/molecules/BackButton';
 
 // Tipo de dato para un Préstamo Completado
 interface CompletedLoan {
