@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { LoaderCircle, ServerCrash, AlertTriangle, ShieldAlert, TrendingUp, DollarSign } from 'lucide-react';
 import DebtFilters from '@/components/molecules/DebtFilters'; // Ajusta la ruta según tu estructura
+import BackButton from '@/components/molecules/BackButton';
 
 // Tipo de dato para un Adeudo
 interface Debt {
@@ -206,9 +207,13 @@ const AdeudosPage = () => {
   return (
     <div className="p-4 sm:p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="mb-6">
+          <BackButton showHome homeHref="/dashboard" className="mb-4" />
+          
+          <div className="flex items-center gap-3">
             <ShieldAlert className="h-8 w-8 text-amber-600"/>
             <h1 className="text-3xl font-bold text-gray-800">Mis Adeudos</h1>
+          </div>
         </div>
 
         {isLoading && (
