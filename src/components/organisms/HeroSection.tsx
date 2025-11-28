@@ -43,7 +43,7 @@ const HeroSection = () => {
             src={image.imageUrl}
             alt={`Hero Image ${index + 1}`}
             fill
-            className="object-contain"
+            className="object-cover"
             priority={index === 0}
             data-ai-hint={image.imageHint}
           />
