@@ -59,6 +59,11 @@
       "description": "La Salle campus entrance",
       "imageUrl": "https://res.cloudinary.com/dkqnjpfn9/image/upload/c_crop,g_auto,f_auto,q_80,w_1080/v1762481222/M9_y78ok5.jpg",
       "imageHint": "campus entrance"
+    },
+    {
+      "id":"otherimgh",
+      "description":"salleGsetiona",
+      
     }
   ]
 }

@@ -25,9 +25,11 @@ const stepTwoSchema = z.object({
 const LogoSalle = () => (
   <div className="flex justify-center items-center mb-4">
     <img 
-      src="https://res.cloudinary.com/dkqnjpfn9/image/upload/w_200,h_200/v1764224515/LabSalle_xvzavm.jpg" 
+      src="https://res.cloudinary.com/dkqnjpfn9/image/upload/w_200,h_200/v1764337089/Adobe_Express_-_file_1_pzvscd.png" 
       alt="Logo La Salle" 
       className="object-contain"
+      width={200}
+      height={200}
     />
   </div>
 );
