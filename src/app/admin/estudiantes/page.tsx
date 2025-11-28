@@ -234,7 +234,10 @@ const AdminStudentsPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8">
-        <AdminBackButton href="/admin" />
+        <AdminBackButton 
+        href="/admin/dashboard"
+        showHome={true}
+      />
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">

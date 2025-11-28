@@ -125,7 +125,10 @@ export default function AnalisisEstadistico() {
       <div className="max-w-7xl mx-auto mb-8">
         {/* PASO 2: USAR EL COMPONENTE AQUÍ ↓ */}
         <div className="mb-4">
-          <AdminBackButton href="/admin" />
+         <AdminBackButton 
+                href="/admin/dashboard"
+                showHome={true}
+              />
         </div>
         
         <div className="flex items-center justify-between">
