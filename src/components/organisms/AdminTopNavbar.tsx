@@ -6,6 +6,7 @@ import { Bell, User, LogOut, School, Clock, AlertCircle, CheckCircle } from 'luc
 import { signOut, useSession } from 'next-auth/react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import Image from 'next/image';
 
 interface Notification {
   id: string;
@@ -172,7 +173,13 @@ const AdminTopNavbar = () => {
     <header className="bg-[#0a1c65] text-white p-3 md:p-4 flex justify-between items-center shadow-md relative">
       {/* Logo y título */}
       <div className="flex items-center gap-2 md:gap-4">
-        <School className="h-6 w-6 md:h-8 md:w-8 flex-shrink-0" />
+      <Image
+  src="https://res.cloudinary.com/dkqnjpfn9/image/upload/v1764343120/Adobe_Express_-_file_2_mluqp5.png"
+  alt="School Icon"
+  width={50}
+  height={50}
+  className="flex-shrink-0"
+/>
         <span className="text-base md:text-xl font-bold truncate">
           LaSalleGestiona
         </span>
