@@ -2,13 +2,11 @@ import { useState, useEffect } from "react";
 import {
   collection,
   query,
-  where,
   getDocs,
   orderBy,
-  limit,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase-config"; // ❌ Quita el .ts
+import { db } from "@/lib/firebase-config";
 
 export interface Adeudo {
   id: string;
@@ -25,8 +23,36 @@ export interface Adeudo {
   prestamoOriginal: string | null;
 }
 
+export interface Pagado {
+  id: string;
+  codigoPago: string;
+  nombreMaterial: string;
+  precio: number;
+  metodo: string;
+  estado: string;
+  fechaPago: Timestamp;
+  adeudoOriginal?: string;
+  grupo: string;
+  transaccionId?: string;
+}
+
+export interface Completado {
+  id: string;
+  codigo: string;
+  nombreMaterial: string;
+  cantidad: number;
+  estado: string;
+  tipo: string;
+  fechaCumplido: Timestamp;
+  fechaInicio?: Timestamp;
+  fechaDevolucion?: Timestamp;
+  grupo: string;
+}
+
 export function useAdeudosFiltrados(studentUid: string | null) {
   const [adeudos, setAdeudos] = useState<Adeudo[]>([]);
+  const [pagados, setPagados] = useState<Pagado[]>([]);
+  const [completados, setCompletados] = useState<Completado[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,30 +62,51 @@ export function useAdeudosFiltrados(studentUid: string | null) {
       return;
     }
 
-    const fetchAdeudos = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
+
+        // Fetch Adeudos
         const adeudosRef = collection(db, `Estudiantes/${studentUid}/Adeudos`);
-        const q = query(adeudosRef, orderBy("fechaVencimiento", "desc"));
-        
-        const snapshot = await getDocs(q);
-        const adeudosData = snapshot.docs.map(doc => ({
+        const qAdeudos = query(adeudosRef, orderBy("fechaVencimiento", "desc"));
+        const snapshotAdeudos = await getDocs(qAdeudos);
+        const adeudosData = snapshotAdeudos.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Adeudo[];
-        
+
+        // Fetch Pagados
+        const pagadosRef = collection(db, `Estudiantes/${studentUid}/Pagados`);
+        const qPagados = query(pagadosRef, orderBy("fechaPago", "desc"));
+        const snapshotPagados = await getDocs(qPagados);
+        const pagadosData = snapshotPagados.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Pagado[];
+
+        // Fetch Completados
+        const completadosRef = collection(db, `Estudiantes/${studentUid}/Completados`);
+        const qCompletados = query(completadosRef, orderBy("fechaCumplido", "desc"));
+        const snapshotCompletados = await getDocs(qCompletados);
+        const completadosData = snapshotCompletados.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Completado[];
+
         setAdeudos(adeudosData);
+        setPagados(pagadosData);
+        setCompletados(completadosData);
         setError(null);
       } catch (err: any) {
-        console.error("Error fetching adeudos:", err);
-        setError(err.message || "Error al cargar adeudos");
+        console.error("Error fetching data:", err);
+        setError(err.message || "Error al cargar datos");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAdeudos();
+    fetchData();
   }, [studentUid]);
 
-  return { adeudos, loading, error };
+  return { adeudos, pagados, completados, loading, error };
 }

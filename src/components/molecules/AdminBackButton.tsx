@@ -11,14 +11,13 @@ interface AdminBackButtonProps {
 const AdminBackButton: React.FC<AdminBackButtonProps> = ({ href, className = '' }) => {
   const router = useRouter();
 
-  const handleBack = () => {
-    if (href) {
-      // Si se proporciona una URL específica, navegar ahí
-      router.push(href);
-    } else {
-      // Si no hay href, navegar al dashboard
-      router.push('/admin/dashboard');
-    }
+  const handleBack = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    
+    const targetUrl = href || '/admin/dashboard';
+    
+    // Forzar navegación con replace para evitar problemas
+    window.location.href = targetUrl;
   };
 
   return (
