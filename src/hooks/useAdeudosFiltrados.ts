@@ -49,6 +49,12 @@ export interface Completado {
   grupo: string;
 }
 
+export interface AllTransactions {
+  adeudos: Adeudo[];
+  pagados: Pagado[];
+  completados: Completado[];
+}
+
 export function useAdeudosFiltrados(studentUid: string | null) {
   const [adeudos, setAdeudos] = useState<Adeudo[]>([]);
   const [pagados, setPagados] = useState<Pagado[]>([]);

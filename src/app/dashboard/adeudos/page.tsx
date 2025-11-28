@@ -1,18 +1,19 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { LoaderCircle, ServerCrash, AlertTriangle, ShieldAlert, TrendingUp, DollarSign } from 'lucide-react';
-import DebtFilters from '@/components/molecules/DebtFilters'; // Ajusta la ruta según tu estructura
+import { LoaderCircle, ServerCrash, AlertTriangle, ShieldAlert, TrendingUp, DollarSign, CheckCircle, Package } from 'lucide-react';
+import DebtFilters from '@/components/molecules/DebtFilters';
 import BackButton from '@/components/molecules/BackButton';
+import { useAdeudosFiltrados } from '@/hooks/useAdeudosFiltrados';
 
-// Tipo de dato para un Adeudo
+// Tipo de dato unificado para todas las transacciones
 interface Debt {
   id: string;
   codigo: string;
   nombreMaterial: string;
   cantidad: number;
-  precio_unitario: number;
+  precio_unitario?: number; // Opcional para pagados/completados
   precio_ajustado: number;
   moneda: string;
   estado: string;
@@ -20,6 +21,8 @@ interface Debt {
   fechaVencimiento: string | null;
   grupo: string;
   prestamoOriginal: string | null;
+  metodo?: string; // Para pagados
+  transaccionId?: string; // Para pagados
 }
 
 // --- Componente de Tarjeta para mostrar un Adeudo ---
@@ -33,7 +36,6 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
     });
   };
 
-  // Calcular antigüedad del adeudo
   const getAntiguedad = (fechaVencimiento: string | null) => {
     if (!fechaVencimiento) return null;
     const vencimiento = new Date(fechaVencimiento);
@@ -46,14 +48,15 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
     return { texto: 'Muy antiguo', color: 'text-red-800', bg: 'bg-red-100' };
   };
 
-  const antiguedad = getAntiguedad(debt.fechaVencimiento);
+  const antiguedad = debt.estado === 'pendiente' ? getAntiguedad(debt.fechaVencimiento) : null;
 
-  // Iconos según tipo
   const getTipoIcon = (tipo: string) => {
     switch (tipo) {
       case 'rotura': return '🔨';
       case 'perdida': return '❌';
       case 'vencimiento': return '⏰';
+      case 'prestamo': return '📦';
+      case 'adeudo_devuelto': return '🔄';
       default: return '📦';
     }
   };
@@ -70,7 +73,6 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
                 <p className="text-sm text-gray-500 font-mono">{debt.codigo}</p>
                 <p className="text-sm text-gray-600 mt-1">Cantidad: {debt.cantidad}</p>
                 
-                {/* Badge de estado */}
                 <span className={`inline-block mt-2 px-3 py-1 text-xs font-semibold rounded-full ${
                   debt.estado === 'pendiente' ? 'bg-red-100 text-red-700' :
                   debt.estado === 'pagado' ? 'bg-green-100 text-green-700' :
@@ -79,6 +81,13 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
                   {debt.estado === 'pendiente' ? '⏳ Pendiente' :
                    debt.estado === 'pagado' ? '✅ Pagado' : '🔄 Devuelto'}
                 </span>
+
+                {/* Método de pago para pagados */}
+                {debt.estado === 'pagado' && debt.metodo && (
+                  <span className="inline-block ml-2 mt-2 px-3 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-700">
+                    {debt.metodo === 'en línea' ? '💳 En línea' : '💵 Presencial'}
+                  </span>
+                )}
             </div>
             <div className="text-right">
                 <p className="text-sm text-gray-600">Monto Total</p>
@@ -88,22 +97,29 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
                     currency: debt.moneda || 'MXN' 
                   })}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Unitario: {debt.precio_unitario.toLocaleString('es-MX', { 
-                    style: 'currency', 
-                    currency: debt.moneda || 'MXN' 
-                  })}
-                </p>
+                {debt.precio_unitario !== undefined && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Unitario: {debt.precio_unitario.toLocaleString('es-MX', { 
+                      style: 'currency', 
+                      currency: debt.moneda || 'MXN' 
+                    })}
+                  </p>
+                )}
             </div>
         </div>
         
         <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
             <div>
-              <p className="font-semibold text-gray-700 text-sm">Fecha de Vencimiento:</p>
-              <p className="text-red-600 font-bold">{formatDate(debt.fechaVencimiento)}</p>
+              <p className="font-semibold text-gray-700 text-sm">
+                {debt.estado === 'pagado' ? 'Fecha de Pago:' : 
+                 debt.estado === 'devuelto' ? 'Fecha de Devolución:' : 
+                 'Fecha de Vencimiento:'}
+              </p>
+              <p className={`font-bold ${debt.estado === 'pendiente' ? 'text-red-600' : 'text-green-600'}`}>
+                {formatDate(debt.fechaVencimiento)}
+              </p>
             </div>
             
-            {/* Indicador de antigüedad */}
             {antiguedad && (
               <div className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${antiguedad.bg} ${antiguedad.color}`}>
                 {antiguedad.texto}
@@ -111,6 +127,9 @@ const DebtCard: React.FC<{ debt: Debt }> = ({ debt }) => {
             )}
             
             <p className="text-xs text-gray-500 capitalize">Tipo: {debt.tipo}</p>
+            {debt.transaccionId && (
+              <p className="text-xs text-gray-400 font-mono">ID: {debt.transaccionId}</p>
+            )}
         </div>
       </div>
     </div>
@@ -122,14 +141,15 @@ const DebtSummary: React.FC<{ debts: Debt[] }> = ({ debts }) => {
   const totalDebt = debts.reduce((sum, debt) => sum + debt.precio_ajustado, 0);
   const pendingDebts = debts.filter(d => d.estado === 'pendiente');
   const paidDebts = debts.filter(d => d.estado === 'pagado');
+  const returnedDebts = debts.filter(d => d.estado === 'devuelto');
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
       <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-lg p-4 border border-amber-200">
         <div className="flex items-center gap-3">
           <DollarSign className="h-8 w-8 text-amber-600" />
           <div>
-            <p className="text-sm text-gray-600">Total Adeudado</p>
+            <p className="text-sm text-gray-600">Total</p>
             <p className="text-2xl font-bold text-amber-700">
               {totalDebt.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' })}
             </p>
@@ -149,10 +169,20 @@ const DebtSummary: React.FC<{ debts: Debt[] }> = ({ debts }) => {
 
       <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
         <div className="flex items-center gap-3">
-          <TrendingUp className="h-8 w-8 text-green-600" />
+          <CheckCircle className="h-8 w-8 text-green-600" />
           <div>
             <p className="text-sm text-gray-600">Pagados</p>
             <p className="text-2xl font-bold text-green-700">{paidDebts.length}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+        <div className="flex items-center gap-3">
+          <Package className="h-8 w-8 text-blue-600" />
+          <div>
+            <p className="text-sm text-gray-600">Devueltos</p>
+            <p className="text-2xl font-bold text-blue-700">{returnedDebts.length}</p>
           </div>
         </div>
       </div>
@@ -160,49 +190,57 @@ const DebtSummary: React.FC<{ debts: Debt[] }> = ({ debts }) => {
   );
 };
 
-// --- Página Principal que muestra la lista de Adeudos ---
+// --- Página Principal ---
 const AdeudosPage = () => {
   const { data: session } = useSession();
-  const [allDebts, setAllDebts] = useState<Debt[]>([]);
+  const { adeudos, pagados, completados, loading, error } = useAdeudosFiltrados(session?.user?.id || null);
   const [filteredDebts, setFilteredDebts] = useState<Debt[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (session?.user?.id) {
-      const fetchDebts = async () => {
-        try {
-          setIsLoading(true);
-          console.log('Fetching debts for user:', session.user.id);
-          
-          const response = await fetch(`/api/adeudos?studentUid=${session.user.id}`);
-          
-          console.log('Response status:', response.status);
-          
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: 'Error desconocido' }));
-            throw new Error(errorData.message || 'No se pudieron cargar los adeudos.');
-          }
-          
-          const data: Debt[] = await response.json();
-          console.log('Adeudos recibidos:', data);
-          setAllDebts(data);
-          setFilteredDebts(data);
-        } catch (err: any) {
-          console.error('Error fetching debts:', err);
-          setError(err.message);
-        } finally {
-          setIsLoading(false);
-        }
-      };
+  // Convertir Firestore Timestamp a string y combinar todas las transacciones
+  const allDebts: Debt[] = React.useMemo(() => {
+    const adeudosConverted = adeudos.map(a => ({
+      ...a,
+      precio_ajustado: a.precio_ajustado || 0,
+      moneda: a.moneda || 'MXN',
+      fechaVencimiento: a.fechaVencimiento?.toDate().toISOString() || null,
+    }));
 
-      fetchDebts();
-    } else {
-      console.log('No session or user ID available');
-      setIsLoading(false);
-      setError('No hay sesión activa');
-    }
-  }, [session]);
+    const pagadosConverted = pagados.map(p => ({
+      id: p.id,
+      codigo: p.codigoPago,
+      nombreMaterial: p.nombreMaterial,
+      cantidad: 1,
+      precio_ajustado: p.precio,
+      moneda: 'MXN',
+      estado: 'pagado',
+      tipo: 'pago',
+      fechaVencimiento: p.fechaPago?.toDate().toISOString() || null,
+      grupo: p.grupo,
+      prestamoOriginal: p.adeudoOriginal || null,
+      metodo: p.metodo,
+      transaccionId: p.transaccionId,
+    }));
+
+    const completadosConverted = completados.map(c => ({
+      id: c.id,
+      codigo: c.codigo,
+      nombreMaterial: c.nombreMaterial,
+      cantidad: c.cantidad,
+      precio_ajustado: 0,
+      moneda: 'MXN',
+      estado: 'devuelto',
+      tipo: c.tipo,
+      fechaVencimiento: c.fechaCumplido?.toDate().toISOString() || null,
+      grupo: c.grupo,
+      prestamoOriginal: null,
+    }));
+
+    return [...adeudosConverted, ...pagadosConverted, ...completadosConverted];
+  }, [adeudos, pagados, completados]);
+
+  React.useEffect(() => {
+    setFilteredDebts(allDebts);
+  }, [allDebts]);
 
   return (
     <div className="p-4 sm:p-6 md:p-8">
@@ -212,18 +250,18 @@ const AdeudosPage = () => {
           
           <div className="flex items-center gap-3">
             <ShieldAlert className="h-8 w-8 text-amber-600"/>
-            <h1 className="text-3xl font-bold text-gray-800">Mis Adeudos</h1>
+            <h1 className="text-3xl font-bold text-gray-800">Historial de Transacciones</h1>
           </div>
         </div>
 
-        {isLoading && (
+        {loading && (
           <div className="flex justify-center items-center h-64">
             <LoaderCircle className="h-12 w-12 text-amber-500 animate-spin" />
-            <p className="ml-4 text-gray-600">Buscando adeudos pendientes...</p>
+            <p className="ml-4 text-gray-600">Cargando información...</p>
           </div>
         )}
 
-        {!isLoading && error && (
+        {!loading && error && (
           <div className="flex flex-col items-center justify-center h-64 bg-red-50 border border-red-200 rounded-lg p-6">
             <ServerCrash className="h-12 w-12 text-red-500"/>
             <p className="mt-4 text-red-700 font-semibold">Error al cargar los datos</p>
@@ -231,26 +269,19 @@ const AdeudosPage = () => {
           </div>
         )}
 
-        {!isLoading && !error && allDebts.length === 0 && (
+        {!loading && !error && allDebts.length === 0 && (
           <div className="flex flex-col items-center justify-center h-64 bg-gray-50 border border-gray-200 rounded-lg p-6">
             <AlertTriangle className="h-12 w-12 text-gray-400"/>
-            <p className="mt-4 text-gray-600 font-semibold">¡Estás al corriente!</p>
-            <p className="text-gray-500 text-sm">No tienes ningún adeudo pendiente.</p>
+            <p className="mt-4 text-gray-600 font-semibold">Sin transacciones</p>
+            <p className="text-gray-500 text-sm">No hay registros de adeudos, pagos o devoluciones.</p>
           </div>
         )}
 
-        {!isLoading && !error && allDebts.length > 0 && (
+        {!loading && !error && allDebts.length > 0 && (
           <>
-            {/* Resumen estadístico */}
             <DebtSummary debts={filteredDebts} />
+            <DebtFilters debts={allDebts} onFilteredDebtsChange={setFilteredDebts} />
 
-            {/* Filtros y búsqueda */}
-            <DebtFilters 
-              debts={allDebts} 
-              onFilteredDebtsChange={setFilteredDebts}
-            />
-
-            {/* Grid de adeudos */}
             {filteredDebts.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredDebts.map(debt => <DebtCard key={debt.id} debt={debt} />)}

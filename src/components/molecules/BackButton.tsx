@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Home } from 'lucide-react';
 
 interface BackButtonProps {
-  /** Ruta a la que redirigir. Si no se especifica, usa router.back() */
+  /** Ruta a la que redirigir. Default: "/admin/dashboard" */
   href?: string;
   /** Texto del botón. Default: "Regresar" */
   label?: string;
@@ -18,7 +18,7 @@ interface BackButtonProps {
 }
 
 export default function BackButton({
-  href,
+  href = '/admin/dashboard', // Valor por defecto cambiado aquí
   label = 'Regresar',
   showHome = false,
   homeHref = '/estudiante/dashboard',
@@ -27,11 +27,7 @@ export default function BackButton({
   const router = useRouter();
 
   const handleBack = () => {
-    if (href) {
-      router.push(href);
-    } else {
-      router.back();
-    }
+    router.push(href);
   };
 
   const handleHome = () => {
@@ -65,7 +61,7 @@ export default function BackButton({
 
 // Versión compacta para móviles
 export function BackButtonMobile({
-  href,
+  href = '/admin/dashboard', // Valor por defecto cambiado aquí
   showHome = false,
   homeHref = '/estudiante',
   className = '',
@@ -73,11 +69,7 @@ export function BackButtonMobile({
   const router = useRouter();
 
   const handleBack = () => {
-    if (href) {
-      router.push(href);
-    } else {
-      router.back();
-    }
+    router.push(href);
   };
 
   const handleHome = () => {

@@ -8,7 +8,7 @@ interface Debt {
   codigo: string;
   nombreMaterial: string;
   cantidad: number;
-  precio_unitario: number;
+  precio_unitario?: number;
   precio_ajustado: number;
   moneda: string;
   estado: string;
@@ -16,6 +16,8 @@ interface Debt {
   fechaVencimiento: string | null;
   grupo: string;
   prestamoOriginal: string | null;
+  metodo?: string;
+  transaccionId?: string;
 }
 
 interface DebtFiltersProps {
@@ -40,7 +42,8 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(debt => 
         debt.nombreMaterial.toLowerCase().includes(term) ||
-        debt.codigo.toLowerCase().includes(term)
+        debt.codigo.toLowerCase().includes(term) ||
+        (debt.transaccionId && debt.transaccionId.toLowerCase().includes(term))
       );
     }
 
@@ -54,21 +57,21 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
       filtered = filtered.filter(debt => debt.estado === selectedEstado);
     }
 
-    // Filtro por fecha de vencimiento
+    // Filtro por fecha de vencimiento/pago/cumplimiento
     if (dateFilter !== 'todos') {
       const now = new Date();
       filtered = filtered.filter(debt => {
         if (!debt.fechaVencimiento) return false;
-        const vencimiento = new Date(debt.fechaVencimiento);
-        const diffDays = Math.floor((now.getTime() - vencimiento.getTime()) / (1000 * 60 * 60 * 24));
+        const fecha = new Date(debt.fechaVencimiento);
+        const diffDays = Math.floor((now.getTime() - fecha.getTime()) / (1000 * 60 * 60 * 24));
 
         switch (dateFilter) {
           case 'reciente': // Últimos 30 días
-            return diffDays <= 30;
+            return diffDays <= 30 && diffDays >= -30; // Incluye futuro cercano
           case 'medio': // Entre 30 y 90 días
             return diffDays > 30 && diffDays <= 90;
           case 'antiguo': // Más de 90 días
-            return diffDays > 90;
+            return diffDays > 90 && diffDays <= 180;
           case 'muyAntiguo': // Más de 180 días (6 meses)
             return diffDays > 180;
           default:
@@ -90,6 +93,8 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
             return precio >= 500 && precio < 1000;
           case 'muyAlto': // Más de $1000
             return precio >= 1000;
+          case 'gratis': // $0 (para completados)
+            return precio === 0;
           default:
             return true;
         }
@@ -123,7 +128,7 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por material o código..."
+            placeholder="Buscar por material, código o ID de transacción..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
@@ -164,7 +169,7 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <AlertCircle className="inline h-4 w-4 mr-1" />
-                Tipo de Adeudo
+                Tipo de Transacción
               </label>
               <select
                 value={selectedTipo}
@@ -172,9 +177,18 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               >
                 <option value="todos">Todos los tipos</option>
-                <option value="rotura">🔨 Rotura</option>
-                <option value="perdida">❌ Pérdida</option>
-                <option value="vencimiento">⏰ Vencimiento</option>
+                <optgroup label="Adeudos">
+                  <option value="rotura">🔨 Rotura</option>
+                  <option value="perdida">❌ Pérdida</option>
+                  <option value="vencimiento">⏰ Vencimiento</option>
+                </optgroup>
+                <optgroup label="Completados">
+                  <option value="prestamo">📦 Préstamo</option>
+                  <option value="adeudo_devuelto">🔄 Adeudo Devuelto</option>
+                </optgroup>
+                <optgroup label="Pagos">
+                  <option value="pago">💳 Pago</option>
+                </optgroup>
               </select>
             </div>
 
@@ -226,6 +240,7 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
               >
                 <option value="todos">Todos los precios</option>
+                <option value="gratis">✨ Gratis ($0)</option>
                 <option value="bajo">💵 Menos de $100</option>
                 <option value="medio">💰 $100 - $500</option>
                 <option value="alto">💸 $500 - $1,000</option>
@@ -250,12 +265,10 @@ const DebtFilters: React.FC<DebtFiltersProps> = ({ debts, onFilteredDebtsChange 
       )}
 
       {/* Indicador de resultados */}
-      {activeFiltersCount > 0 && (
-        <div className="mt-3 text-sm text-gray-600">
-          Mostrando {debts.length} resultado{debts.length !== 1 ? 's' : ''}
-          {activeFiltersCount > 0 && ` con ${activeFiltersCount} filtro${activeFiltersCount !== 1 ? 's' : ''} activo${activeFiltersCount !== 1 ? 's' : ''}`}
-        </div>
-      )}
+      <div className="mt-3 text-sm text-gray-600">
+        Mostrando {debts.length} resultado{debts.length !== 1 ? 's' : ''}
+        {activeFiltersCount > 0 && ` con ${activeFiltersCount} filtro${activeFiltersCount !== 1 ? 's' : ''} activo${activeFiltersCount !== 1 ? 's' : ''}`}
+      </div>
     </div>
   );
 };
