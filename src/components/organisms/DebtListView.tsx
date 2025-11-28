@@ -278,13 +278,14 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) =>
         <DebtCard key={debt.id} debt={debt} onPayDebt={onPayDebt} />
       ))}
 
-      {/* Nota informativa */}
+      {/* Nota informativa 
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
         <p className="text-sm text-blue-800">
           <strong>💡 Nota:</strong> Haz clic en "Pagar ahora" para completar el 
           formulario de pago y resolver tu adeudo.
         </p>
       </div>
+      */}
     </div>
   );
 };
