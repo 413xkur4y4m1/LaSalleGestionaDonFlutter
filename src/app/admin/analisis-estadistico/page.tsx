@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { TrendingUp, AlertTriangle, CheckCircle, Users, Package, RefreshCw, Clock } from 'lucide-react';
+import AdminBackButton from '@/components/molecules/AdminBackButton';
 
 const COLORS = ['#10b981', '#e10022', '#2563eb', '#f59e0b', '#8b5cf6'];
 
@@ -99,6 +100,13 @@ export default function AnalisisEstadistico() {
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8">
+        <div className="mb-4">
+          <AdminBackButton 
+            href="/admin/dashboard"
+            showHome={true}
+          />
+        </div>
+        
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-3xl font-bold text-[#0a1c65] mb-2">📊 Análisis Estadístico</h1>

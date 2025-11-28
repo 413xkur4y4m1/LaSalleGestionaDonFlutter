@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { AlertTriangle, Calendar, DollarSign, CreditCard, Loader2 } from 'lucide-react';
+import { AlertTriangle, Calendar, DollarSign, Loader2 } from 'lucide-react';
 
 // --- TIPOS ---
 interface Adeudo {
@@ -19,22 +19,19 @@ interface Adeudo {
   fechaVencimiento: string | null;
   grupo: string;
   prestamoOriginal: string | null;
-  formularioId?: string; // ⭐ AGREGADO
+  formularioId?: string;
 }
 
-// ⭐ CAMBIAR LA INTERFAZ DE NUEVO
 interface DebtListViewProps {
   studentUid: string;
-  onPayDebt?: (debtId: string, prestamoOriginal: string) => void; // ⭐ Volver a prestamoOriginal
 }
 
 // --- SUB-COMPONENTE: TARJETA DE ADEUDO ---
 interface DebtCardProps {
   debt: Adeudo;
-  onPayDebt?: (debtId: string, prestamoOriginal: string) => void; // ⭐ Volver a prestamoOriginal
 }
 
-const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
+const DebtCard: React.FC<DebtCardProps> = ({ debt }) => {
   const totalAdeudo = debt.precio_ajustado * debt.cantidad;
   
   const formattedDate = debt.fechaVencimiento 
@@ -51,22 +48,6 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
     perdida: { icon: '❌', texto: 'Material perdido' },
     vencimiento: { icon: '⏰', texto: 'No devuelto a tiempo' }
   }[debt.tipo] || { icon: '📦', texto: 'Adeudo' };
-
-  const handlePayClick = () => {
-    // ⭐ OPCIÓN 1: Si el adeudo tiene formularioId
-    if (onPayDebt && debt.formularioId) {
-      onPayDebt(debt.id, debt.formularioId);
-    } 
-    // ⭐ OPCIÓN 2: Si no tiene formularioId, usar prestamoOriginal como fallback
-    else if (onPayDebt && debt.prestamoOriginal) {
-      // Construir formId basado en prestamoOriginal
-      const formId = `form_${debt.prestamoOriginal}`;
-      onPayDebt(debt.id, formId);
-    } 
-    else {
-      alert(`No se encontró formulario para este adeudo: ${debt.codigo}`);
-    }
-  };
 
   return (
     <div className="bg-white border border-yellow-300 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -117,22 +98,12 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt, onPayDebt }) => {
           </div>
         </div>
       </div>
-      
-      <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
-        <button 
-          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
-          onClick={handlePayClick}
-        >
-          <CreditCard className="h-4 w-4" />
-          <span>Pagar ahora</span>
-        </button>
-      </div>
     </div>
   );
 };
 
 // --- COMPONENTE PRINCIPAL ---
-const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) => {
+const DebtListView: React.FC<DebtListViewProps> = ({ studentUid }) => {
   const [adeudos, setAdeudos] = useState<Adeudo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -192,7 +163,7 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) =>
             fechaVencimiento,
             grupo: data.grupo || '',
             prestamoOriginal: data.prestamoOriginal || null,
-            formularioId: data.formularioId || data.formId || null, // ⭐ AGREGADO
+            formularioId: data.formularioId || data.formId || null,
           };
         });
 
@@ -261,7 +232,7 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) =>
               Tienes {adeudos.length} adeudo{adeudos.length !== 1 ? 's' : ''} pendiente{adeudos.length !== 1 ? 's' : ''}
             </h3>
             <p className="text-yellow-700 text-sm mt-1">
-              Por favor, realiza el pago lo antes posible
+              Por favor, acércate con el administrador para resolver tu adeudo
             </p>
           </div>
           <div className="text-right">
@@ -275,17 +246,8 @@ const DebtListView: React.FC<DebtListViewProps> = ({ studentUid, onPayDebt }) =>
 
       {/* Lista de adeudos */}
       {adeudos.map(debt => (
-        <DebtCard key={debt.id} debt={debt} onPayDebt={onPayDebt} />
+        <DebtCard key={debt.id} debt={debt} />
       ))}
-
-      {/* Nota informativa 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-        <p className="text-sm text-blue-800">
-          <strong>💡 Nota:</strong> Haz clic en "Pagar ahora" para completar el 
-          formulario de pago y resolver tu adeudo.
-        </p>
-      </div>
-      */}
     </div>
   );
 };
