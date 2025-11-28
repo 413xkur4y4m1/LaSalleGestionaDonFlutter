@@ -1,9 +1,10 @@
-
+// app/api/pagados/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firestore-operations-server';
 import { Timestamp } from 'firebase-admin/firestore';
 
-// Esta API se encarga de leer la subcolección 'Pagados' de un estudiante.
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
     try {
         const db = getDb();
@@ -11,29 +12,73 @@ export async function GET(req: NextRequest) {
         const studentUid = searchParams.get('studentUid');
 
         if (!studentUid) {
-            return NextResponse.json({ message: 'El ID del estudiante es requerido.' }, { status: 400 });
+            return NextResponse.json({ 
+                message: 'El ID del estudiante es requerido.' 
+            }, { status: 400 });
         }
 
-        const paidCollectionRef = db.collection(`Estudiantes/${studentUid}/Pagados`);
-        // Ordenamos por fecha de pago para mostrar los más recientes primero
-        const q = paidCollectionRef.orderBy('fechaPago', 'desc');
-        const querySnapshot = await q.get();
+        console.log(`📊 Obteniendo pagos del estudiante: ${studentUid}`);
+
+        // ✅ CORRECCIÓN: Usar .doc() para formar la ruta correcta
+        const paidCollectionRef = db
+            .collection('Estudiantes')
+            .doc(studentUid)
+            .collection('Pagados');
+
+        // Ordenar por fecha de pago descendente
+        const querySnapshot = await paidCollectionRef
+            .orderBy('fechaPago', 'desc')
+            .get();
+
+        console.log(`✅ Encontrados ${querySnapshot.size} pagos`);
 
         const paidDebts = querySnapshot.docs.map(doc => {
             const data = doc.data();
+            
+            // Convertir timestamps de forma segura
+            let fechaVencimiento = null;
+            let fechaPago = null;
+
+            try {
+                if (data.fechaVencimiento) {
+                    if (data.fechaVencimiento instanceof Timestamp) {
+                        fechaVencimiento = data.fechaVencimiento.toDate().toISOString();
+                    } else if (data.fechaVencimiento.toDate) {
+                        fechaVencimiento = data.fechaVencimiento.toDate().toISOString();
+                    }
+                }
+            } catch (e) {
+                console.warn('Error convirtiendo fechaVencimiento:', e);
+            }
+
+            try {
+                if (data.fechaPago) {
+                    if (data.fechaPago instanceof Timestamp) {
+                        fechaPago = data.fechaPago.toDate().toISOString();
+                    } else if (data.fechaPago.toDate) {
+                        fechaPago = data.fechaPago.toDate().toISOString();
+                    }
+                }
+            } catch (e) {
+                console.warn('Error convirtiendo fechaPago:', e);
+            }
+
             return {
                 id: doc.id,
-                ...data,
-                // Aseguramos que las fechas se conviertan a un formato estándar (ISO string)
-                fechaVencimiento: (data.fechaVencimiento as Timestamp)?.toDate().toISOString(),
-                fechaPago: (data.fechaPago as Timestamp)?.toDate().toISOString(),
+                nombreMaterial: data.nombreMaterial || 'Material desconocido',
+                precio_total: data.precio || data.precio_total || 0,
+                fechaVencimiento: fechaVencimiento || new Date().toISOString(),
+                fechaPago: fechaPago || new Date().toISOString(),
             };
         });
 
         return NextResponse.json(paidDebts, { status: 200 });
 
     } catch (error: any) {
-        console.error("Error al obtener los adeudos pagados:", error);
-        return NextResponse.json({ message: 'Error interno del servidor al obtener el historial de pagos.' }, { status: 500 });
+        console.error("❌ Error al obtener los adeudos pagados:", error);
+        return NextResponse.json({ 
+            message: 'Error interno del servidor al obtener el historial de pagos.',
+            error: error.message 
+        }, { status: 500 });
     }
 }
